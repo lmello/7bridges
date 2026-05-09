@@ -48,10 +48,16 @@ def test_debug_middleware_captures_request_response(debug_client, tmp_path):
     stream_body_line = json.loads(lines[1])
     assert stream_body_line["type"] == "stream_body"
     assert "text" in stream_body_line
+    assert "content_length" in stream_body_line
+    assert "handler_latency_ms" in stream_body_line
+    assert "stream_duration_ms" in stream_body_line
+    assert isinstance(stream_body_line["handler_latency_ms"], (int, float))
+    assert isinstance(stream_body_line["stream_duration_ms"], (int, float))
 
     response_line = json.loads(lines[2])
     assert response_line["type"] == "response"
     assert response_line["status_code"] == 400
     assert "duration_ms" in response_line
+    assert isinstance(response_line["duration_ms"], (int, float))
     # Streaming placeholder, not the actual text
     assert "streaming_response" in response_line["body"]

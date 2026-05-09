@@ -5,6 +5,7 @@ import os
 import time
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +56,7 @@ class DebugMiddleware(BaseHTTPMiddleware):
 
         request_entry = {
             "type": "request",
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+            "timestamp": datetime.now(UTC).isoformat(),
             "session_id": session_id,
             "method": request.method,
             "path": request.url.path,
@@ -71,21 +72,24 @@ class DebugMiddleware(BaseHTTPMiddleware):
 
         # Call handler
         response = await call_next(request)
-        duration_ms = round((time.time() - started_at) * 1000, 2)
+        handler_done_at = time.time()
 
         # Capture response body
         resp_body: object = None
         if self._is_streaming_response(response):
-            resp_body = await self._capture_streaming_response(response, log_path)
+            resp_body = await self._capture_streaming_response(
+                response, log_path, started_at, handler_done_at
+            )
         else:
             resp_body, response = await self._capture_response_body(response)
 
+        finished_at = time.time()
         response_entry = {
             "type": "response",
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+            "timestamp": datetime.now(UTC).isoformat(),
             "session_id": session_id,
             "status_code": response.status_code,
-            "duration_ms": duration_ms,
+            "duration_ms": round((finished_at - started_at) * 1000, 2),
             "headers": dict(response.headers.items()),
             "body": resp_body,
         }
@@ -110,11 +114,14 @@ class DebugMiddleware(BaseHTTPMiddleware):
         self,
         response: Response,
         log_path: Path,
+        started_at: float,
+        handler_done_at: float,
     ) -> str:
         """Consume a StreamingResponse, log the full text, and rebuild it.
 
         Returns the captured body text for the response entry.
         """
+        stream_start_at = time.time()
         chunks: list[bytes] = []
         body_iter = getattr(response, "body_iterator", None)
         if body_iter is not None:
@@ -127,14 +134,17 @@ class DebugMiddleware(BaseHTTPMiddleware):
                     # memoryview or other buffer protocol
                     chunks.append(bytes(raw))
 
+        stream_end_at = time.time()
         body_bytes = b"".join(chunks)
 
         # Also write an intermediate "stream_body" entry with the raw SSE text
         # so you can inspect the full response without scrolling through deltas
         stream_entry = {
             "type": "stream_body",
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+            "timestamp": datetime.now(UTC).isoformat(),
             "content_length": len(body_bytes),
+            "handler_latency_ms": round((handler_done_at - started_at) * 1000, 2),
+            "stream_duration_ms": round((stream_end_at - stream_start_at) * 1000, 2),
             "text": body_bytes.decode("utf-8", errors="replace"),
         }
         with open(log_path, "a", encoding="utf-8") as f:
