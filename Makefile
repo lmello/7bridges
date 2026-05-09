@@ -1,4 +1,4 @@
-.PHONY: install dev lock start stop restart flush logs test test-unit test-e2e test-smoke test-cov test-ci lint format check
+.PHONY: install dev lock start stop restart flush logs run-debug tail-logs test test-unit test-e2e test-smoke test-cov test-ci lint format check
 
 install:
 	uv venv --python 3.13
@@ -24,6 +24,13 @@ flush:
 
 logs:
 	pm2 logs 7-bridges-of-claude
+
+run-debug:
+	BRIDGE_DEBUG=1 .venv/bin/python -m uvicorn seven_bridges.main:app --host 0.0.0.0 --port 4001
+
+tail-logs:
+	@mkdir -p logs/debug
+	@bash -c 'cd logs/debug && tail -f $$(ls -t *.jsonl | head -1) | jq --unbuffered .'
 
 test:
 	.venv/bin/pytest tests/ -v

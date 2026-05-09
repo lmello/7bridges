@@ -70,7 +70,10 @@ Run via PM2 (production) or directly (development):
 # Production
 make start
 
-# Development
+# Development with debug logging
+make run-debug
+
+# Development (basic)
 uvicorn seven_bridges.main:app --reload --port 4001
 ```
 
@@ -144,6 +147,44 @@ curl -N -X POST http://localhost:4001/v1/messages \
 ├── docs/api-schemas/        # Reference OpenAPI specs
 ├── Makefile                 # Test, lint, format targets
 └── ecosystem.config.js      # PM2 process config
+```
+
+## Debug Logging
+
+Every request/response pair is written to `logs/debug/<session_id>.jsonl` when `BRIDGE_DEBUG=1` is set.
+
+```sh
+# Run the server with debug logging enabled
+make run-debug
+
+# In another terminal, tail the latest log with jq formatting
+make tail-logs
+```
+
+Each JSONL file contains:
+
+| Entry | Description |
+|---|---|
+| `request` | Method, path, headers, parsed request body |
+| `stream_body` | Full raw SSE text (for streaming responses) |
+| `response` | Status code, duration, headers, body (or `<streaming_response: N bytes>`) |
+
+Example — read the last 10 entries of the most recent log:
+
+```sh
+cd logs/debug && tail -n 10 $(ls -t *.jsonl | head -1) | jq .
+```
+
+Filter for just the requests:
+
+```sh
+cd logs/debug && cat $(ls -t *.jsonl | head -1) | jq 'select(.type=="request")'
+```
+
+Filter for errors only:
+
+```sh
+cd logs/debug && cat $(ls -t *.jsonl | head -1) | jq 'select(.status_code >= 400)'
 ```
 
 ## Development
