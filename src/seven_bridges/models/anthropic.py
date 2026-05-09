@@ -20,6 +20,7 @@ class TextBlock(BaseModel):
 class ThinkingBlock(BaseModel):
     type: Literal["thinking"] = "thinking"
     thinking: str
+    signature: str = ""
 
 
 class RedactedThinkingBlock(BaseModel):
@@ -34,14 +35,21 @@ class ToolUseBlock(BaseModel):
     input: dict[str, Any]
 
 
+class ImageBlock(BaseModel):
+    type: Literal["image"] = "image"
+    source: dict[str, Any]
+
+
 class ToolResultBlock(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     tool_use_id: str
-    content: str | list[TextBlock] | None = None
+    content: str | list[TextBlock | ImageBlock] | None = None
     is_error: bool | None = None
 
 
-ContentBlock = TextBlock | ThinkingBlock | RedactedThinkingBlock | ToolUseBlock | ToolResultBlock
+ContentBlock = (
+    TextBlock | ThinkingBlock | RedactedThinkingBlock | ImageBlock | ToolUseBlock | ToolResultBlock
+)
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +93,8 @@ class MessagesRequest(BaseModel):
     stop_sequences: list[str] | None = None
     stream: bool | None = False
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
+    top_p: float | None = Field(default=None, ge=0.0, le=1.0)
+    top_k: int | None = Field(default=None, ge=0)
     tool_choice: Literal["auto", "any", "none"] | dict[str, Any] | None = None
     tools: list[Tool] | None = None
     thinking: dict[str, Any] | None = None  # Anthropic-native; stripped by bridges

@@ -1,4 +1,4 @@
-.PHONY: install dev start stop restart flush logs lint format test
+.PHONY: install dev lock start stop restart flush logs test test-unit test-e2e test-smoke test-cov test-ci lint format check
 
 install:
 	uv venv --python 3.13
@@ -28,9 +28,26 @@ logs:
 test:
 	.venv/bin/pytest tests/ -v
 
+test-unit:
+	.venv/bin/pytest tests/test_translation.py tests/test_streaming.py -v
+
+test-e2e:
+	.venv/bin/pytest tests/test_e2e.py -v
+
+test-smoke:
+	.venv/bin/pytest tests/test_smoke.py -v
+
+test-cov:
+	.venv/bin/pytest tests/ --cov=src/seven_bridges --cov-report=term-missing --cov-report=html
+
+test-ci:
+	.venv/bin/pytest tests/ --cov=src/seven_bridges --cov-report=xml --cov-fail-under=85
+
 lint:
-	.venv/bin/ruff check src/
+	.venv/bin/ruff check src/ tests/
 	.venv/bin/mypy src/
 
 format:
-	.venv/bin/ruff format src/
+	.venv/bin/ruff format src/ tests/
+
+check: lint test

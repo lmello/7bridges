@@ -15,6 +15,7 @@ from seven_bridges.backends.kimi import KimiBridge
 from seven_bridges.config import ModelRoute, settings
 from seven_bridges.debug import DebugMiddleware
 from seven_bridges.models.anthropic import MessagesRequest
+from seven_bridges.translation.request import request_has_images
 from seven_bridges.translation.stream import translate_openai_stream
 
 
@@ -34,6 +35,10 @@ app.add_middleware(DebugMiddleware)
 
 def _get_bridge(route: ModelRoute) -> Bridge:
     """Instantiate the correct backend bridge for a model route."""
+    kwargs = {
+        "model_alias": route.alias,
+        "backend_model": route.backend_model,
+    }
     if route.bridge == "deepseek":
         if not settings.deepseek_api_key:
             raise BridgeError(
@@ -41,7 +46,7 @@ def _get_bridge(route: ModelRoute) -> Bridge:
                 status_code=503,
                 error_type="configuration_error",
             )
-        return DeepSeekBridge(api_key=settings.deepseek_api_key)
+        return DeepSeekBridge(api_key=settings.deepseek_api_key, **kwargs)
     elif route.bridge == "kimi":
         if not settings.kimi_api_key:
             raise BridgeError(
@@ -49,7 +54,7 @@ def _get_bridge(route: ModelRoute) -> Bridge:
                 status_code=503,
                 error_type="configuration_error",
             )
-        return KimiBridge(api_key=settings.kimi_api_key)
+        return KimiBridge(api_key=settings.kimi_api_key, **kwargs)
     else:
         raise BridgeError(
             f"Unknown bridge: {route.bridge}",
@@ -92,9 +97,20 @@ async def messages(
             },
         )
 
-    # Override model with backend model name
-    anthropic_request.model = route.backend_model
     bridge = _get_bridge(route)
+
+    # Validate request against vendor capabilities
+    if request_has_images(anthropic_request) and not bridge.capabilities.supports_vision:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": f"Model {route.alias} does not support image input",
+                },
+            },
+        )
 
     if anthropic_request.stream:
         stream = bridge.chat_stream(anthropic_request)
@@ -113,8 +129,7 @@ async def messages(
         return JSONResponse(content=response.model_dump())
 
 
-@app.get("/v1/models")
-async def list_models(request: Request) -> dict[str, Any]:
+async def _list_models() -> dict[str, Any]:
     """List available models (Anthropic compatible)."""
     models: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -129,6 +144,17 @@ async def list_models(request: Request) -> dict[str, Any]:
                 }
             )
     return {"data": models, "has_more": False, "first_id": None, "last_id": None}
+
+
+@app.get("/v1/models")
+async def list_models(request: Request) -> dict[str, Any]:
+    return await _list_models()
+
+
+@app.get("/models")
+async def list_models_alias(request: Request) -> dict[str, Any]:
+    """Alias for /v1/models (some clients hit /models directly)."""
+    return await _list_models()
 
 
 @app.get("/health")

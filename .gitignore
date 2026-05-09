@@ -13,3 +13,5 @@ build/
 *.log
 .DS_Store
 logs/debug/
+.coverage
+docs/api-schemas/kimi-cli-kosong-provider.py

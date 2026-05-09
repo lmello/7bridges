@@ -52,7 +52,7 @@ def openai_to_anthropic(data: dict[str, Any], model_alias: str) -> MessagesRespo
 
     # Reasoning content comes first (if present)
     if msg.reasoning_content:
-        content.append(ThinkingBlock(thinking=msg.reasoning_content))
+        content.append(ThinkingBlock(thinking=msg.reasoning_content, signature=""))
 
     # Main text content
     if msg.content:

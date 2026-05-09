@@ -1,0 +1,44 @@
+{
+  "endpoint": "https://api.kimi.com/coding/v1",
+  "probed_at": "2026-05-12T17:17:00Z",
+  "findings": {
+    "user_agent_gating": {
+      "works": "claude-code/0.1.0",
+      "rejected": "kimi-cli/0.1.0"
+    },
+    "available_endpoints": [
+      "/models",
+      "/chat/completions"
+    ],
+    "unavailable_endpoints": [
+      "/completions"
+    ],
+    "models": [
+      {
+        "id": "kimi-for-coding",
+        "display_name": "Kimi-k2.6",
+        "context_length": 262144,
+        "supports_reasoning": true,
+        "supports_image_in": true,
+        "supports_video_in": true
+      }
+    ],
+    "response_format": {
+      "non_streaming": {
+        "standard_openai_fields": ["id", "object", "created", "model", "choices", "usage"],
+        "kimi_extensions": {
+          "message.reasoning_content": "Thinking/reasoning text",
+          "usage.cached_tokens": "Cache hit token count",
+          "usage.prompt_tokens_details.cached_tokens": "Detailed cache info"
+        }
+      },
+      "streaming": {
+        "standard_openai_sse": true,
+        "kimi_extensions": {
+          "delta.reasoning_content": "Reasoning tokens streamed before content"
+        }
+      }
+    },
+    "finish_reasons": ["stop", "length"]
+  }
+}

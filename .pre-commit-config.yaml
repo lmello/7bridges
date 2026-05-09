@@ -1,4 +1,9 @@
 repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+
   - repo: local
     hooks:
       - id: ruff-check
@@ -25,7 +30,7 @@ repos:
 
       - id: pytest
         name: pytest
-        entry: .venv/bin/pytest tests/ -v
+        entry: .venv/bin/pytest tests/ -v --cov=src/seven_bridges --cov-fail-under=80
         language: system
         types: [python]
         pass_filenames: false

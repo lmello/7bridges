@@ -1,6 +1,7 @@
 """OpenAI SSE stream → Anthropic SSE event translation."""
 
 import json
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -18,17 +19,19 @@ async def translate_openai_stream(
 
     Yields formatted SSE strings ready to be sent to the client.
     """
-    message_id = ""
-    reasoning_started = False
-    content_started = False
-    reasoning_index = 0
-    content_index = 1
-    current_reasoning = ""
-    current_content = ""
+    message_id = str(uuid.uuid4())
     input_tokens = 0
     output_tokens = 0
     cache_read = 0
     stop_reason: str | None = None
+
+    # Track which block types are currently open and their indices
+    open_block_type: str | None = None
+    open_block_index: int = -1
+    next_block_index = 0
+
+    # Tool call tracking: maps tool_index -> {"id", "name", "arguments", "block_index"}
+    tool_call_map: dict[int, dict[str, Any]] = {}
 
     # Send message_start with a skeleton message
     yield _make_sse(
@@ -36,7 +39,7 @@ async def translate_openai_stream(
         {
             "type": "message_start",
             "message": {
-                "id": "",
+                "id": message_id,
                 "type": "message",
                 "role": "assistant",
                 "model": model_alias,
@@ -73,7 +76,10 @@ async def translate_openai_stream(
 
         delta = choices[0].get("delta", {})
         finish = choices[0].get("finish_reason")
-        message_id = chunk.get("id", message_id)
+
+        # Prefer upstream id if available, but keep our uuid as fallback
+        if chunk.get("id"):
+            message_id = chunk["id"]
 
         if finish:
             stop_reason = _map_stop_reason(finish)
@@ -81,22 +87,30 @@ async def translate_openai_stream(
         # Handle reasoning_content
         reasoning = delta.get("reasoning_content")
         if reasoning:
-            if not reasoning_started:
-                reasoning_started = True
+            if open_block_type != "thinking":
+                # Close previous block if any
+                if open_block_type is not None:
+                    yield _make_sse(
+                        "content_block_stop",
+                        {"type": "content_block_stop", "index": open_block_index},
+                    )
+                # Start thinking block
+                open_block_index = next_block_index
+                next_block_index += 1
+                open_block_type = "thinking"
                 yield _make_sse(
                     "content_block_start",
                     {
                         "type": "content_block_start",
-                        "index": reasoning_index,
-                        "content_block": {"type": "thinking", "thinking": ""},
+                        "index": open_block_index,
+                        "content_block": {"type": "thinking", "thinking": "", "signature": ""},
                     },
                 )
-            current_reasoning += reasoning
             yield _make_sse(
                 "content_block_delta",
                 {
                     "type": "content_block_delta",
-                    "index": reasoning_index,
+                    "index": open_block_index,
                     "delta": {"type": "thinking_delta", "thinking": reasoning},
                 },
             )
@@ -104,28 +118,30 @@ async def translate_openai_stream(
         # Handle content
         content = delta.get("content")
         if content:
-            if not content_started:
-                content_started = True
-                # If reasoning was ongoing, close it first
-                if reasoning_started:
+            if open_block_type != "text":
+                # Close previous block if any
+                if open_block_type is not None:
                     yield _make_sse(
                         "content_block_stop",
-                        {"type": "content_block_stop", "index": reasoning_index},
+                        {"type": "content_block_stop", "index": open_block_index},
                     )
+                # Start text block
+                open_block_index = next_block_index
+                next_block_index += 1
+                open_block_type = "text"
                 yield _make_sse(
                     "content_block_start",
                     {
                         "type": "content_block_start",
-                        "index": content_index,
+                        "index": open_block_index,
                         "content_block": {"type": "text", "text": ""},
                     },
                 )
-            current_content += content
             yield _make_sse(
                 "content_block_delta",
                 {
                     "type": "content_block_delta",
-                    "index": content_index,
+                    "index": open_block_index,
                     "delta": {"type": "text_delta", "text": content},
                 },
             )
@@ -133,19 +149,71 @@ async def translate_openai_stream(
         # Handle tool_calls (streaming tool calls)
         tool_calls = delta.get("tool_calls")
         if tool_calls:
-            # TODO: Implement streaming tool call translation
-            pass
+            for tc in tool_calls:
+                tc_index = tc.get("index", 0)
+                tc_id = tc.get("id")
+                tc_function = tc.get("function", {})
+                tc_name = tc_function.get("name")
+                tc_args = tc_function.get("arguments")
 
-    # Close any open blocks
-    if reasoning_started and not content_started:
+                if tc_index not in tool_call_map:
+                    # Close previous block if any
+                    if open_block_type is not None:
+                        yield _make_sse(
+                            "content_block_stop",
+                            {"type": "content_block_stop", "index": open_block_index},
+                        )
+                    # New tool call starting
+                    tool_call_map[tc_index] = {
+                        "id": tc_id or "",
+                        "name": tc_name or "",
+                        "arguments": tc_args or "",
+                        "block_index": next_block_index,
+                    }
+                    open_block_index = next_block_index
+                    next_block_index += 1
+                    open_block_type = "tool_use"
+                    # Emit content_block_start
+                    yield _make_sse(
+                        "content_block_start",
+                        {
+                            "type": "content_block_start",
+                            "index": open_block_index,
+                            "content_block": {
+                                "type": "tool_use",
+                                "id": tc_id or "",
+                                "name": tc_name or "",
+                                "input": {},
+                            },
+                        },
+                    )
+                else:
+                    # Existing tool call receiving more data
+                    tc_state = tool_call_map[tc_index]
+                    if tc_id:
+                        tc_state["id"] = tc_id
+                    if tc_name:
+                        tc_state["name"] = tc_name
+                    if tc_args:
+                        tc_state["arguments"] += tc_args
+                        # Emit input_json_delta
+                        yield _make_sse(
+                            "content_block_delta",
+                            {
+                                "type": "content_block_delta",
+                                "index": tc_state["block_index"],
+                                "delta": {
+                                    "type": "input_json_delta",
+                                    "partial_json": tc_args,
+                                },
+                            },
+                        )
+
+    # Close any open block
+    if open_block_type is not None:
         yield _make_sse(
             "content_block_stop",
-            {"type": "content_block_stop", "index": reasoning_index},
-        )
-    elif content_started:
-        yield _make_sse(
-            "content_block_stop",
-            {"type": "content_block_stop", "index": content_index},
+            {"type": "content_block_stop", "index": open_block_index},
         )
 
     # Send message_delta with usage
