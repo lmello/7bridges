@@ -1,4 +1,4 @@
-.PHONY: dev install test lint format start
+.PHONY: install dev start stop restart flush logs lint format test
 
 install:
 	uv venv --python 3.13
@@ -7,8 +7,23 @@ install:
 dev:
 	.venv/bin/python -m pip install -e ".[dev]"
 
+lock:
+	uv pip compile pyproject.toml -o requirements.txt
+
 start:
-	.venv/bin/uvicorn seven_bridges.main:app --host 0.0.0.0 --port 4000 --reload
+	pm2 start ecosystem.config.js
+
+stop:
+	pm2 delete 7-bridges-of-claude
+
+restart:
+	pm2 restart 7-bridges-of-claude
+
+flush:
+	rm -f logs/out.log logs/err.log
+
+logs:
+	pm2 logs 7-bridges-of-claude
 
 test:
 	.venv/bin/pytest tests/ -v
