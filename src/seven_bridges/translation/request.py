@@ -1,7 +1,7 @@
 """Anthropic Messages API → OpenAI Chat Completions request translation."""
 
 import json
-from typing import Any
+from typing import Any, Literal, cast
 
 from seven_bridges.models.anthropic import (
     ContentBlock,
@@ -148,5 +148,8 @@ def anthropic_to_openai(
         stop=request.stop_sequences,
         stream=request.stream or False,
         tools=_convert_tools(request.tools),
-        tool_choice=_convert_tool_choice(request.tool_choice),
+        tool_choice=cast(
+            "Literal['none', 'auto', 'required'] | dict[str, Any] | None",
+            _convert_tool_choice(request.tool_choice),
+        ),
     )

@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from typing import Any
 
 from seven_bridges.models.anthropic import MessagesRequest, MessagesResponse
 
@@ -37,6 +38,6 @@ class Bridge(ABC):
         ...
 
     @abstractmethod
-    async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict]:
+    def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
         """Send a streaming chat request and yield Anthropic-format SSE events."""
         ...

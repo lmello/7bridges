@@ -1,21 +1,24 @@
 """FastAPI application entry point."""
 
 import json
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
+from starlette.responses import Response
 
 from seven_bridges.backends.base import Bridge, BridgeError
 from seven_bridges.backends.deepseek import DeepSeekBridge
 from seven_bridges.backends.kimi import KimiBridge
-from seven_bridges.config import settings
+from seven_bridges.config import ModelRoute, settings
 from seven_bridges.models.anthropic import MessagesRequest
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
     yield
 
@@ -27,7 +30,7 @@ app = FastAPI(
 )
 
 
-def _get_bridge(route) -> Bridge:
+def _get_bridge(route: ModelRoute) -> Bridge:
     """Instantiate the correct backend bridge for a model route."""
     if route.bridge == "deepseek":
         if not settings.deepseek_api_key:
@@ -53,12 +56,12 @@ def _get_bridge(route) -> Bridge:
         )
 
 
-@app.post("/v1/messages")
+@app.post("/v1/messages", response_model=None)
 async def messages(
     request: Request,
     x_api_key: str = Header(default="", alias="x-api-key"),
     authorization: str = Header(default=""),
-):
+) -> Response:
     """Anthropic Messages API compatible endpoint."""
     # Auth: accept Anthropic-style x-api-key or Bearer token
     api_key = x_api_key or authorization.replace("Bearer ", "")
@@ -93,8 +96,9 @@ async def messages(
 
     if anthropic_request.stream:
 
-        async def event_stream():
-            async for event in bridge.chat_stream(anthropic_request):
+        async def event_stream() -> AsyncIterator[str]:
+            stream = bridge.chat_stream(anthropic_request)
+            async for event in stream:
                 yield f"event: {event.get('type', 'message')}\ndata: {json.dumps(event)}\n\n"
             yield "event: message_stop\ndata: {}\n\n"
 
@@ -112,10 +116,10 @@ async def messages(
 
 
 @app.get("/v1/models")
-async def list_models(request: Request):
+async def list_models(request: Request) -> dict[str, Any]:
     """List available models (Anthropic compatible)."""
-    models = []
-    seen = set()
+    models: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for _alias, route in settings.model_routes.items():
         if route.alias not in seen:
             seen.add(route.alias)
@@ -130,12 +134,12 @@ async def list_models(request: Request):
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.exception_handler(BridgeError)
-async def bridge_error_handler(request: Request, exc: BridgeError):
+async def bridge_error_handler(request: Request, exc: BridgeError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -149,7 +153,7 @@ async def bridge_error_handler(request: Request, exc: BridgeError):
 
 
 @app.exception_handler(ValidationError)
-async def validation_error_handler(request: Request, exc: ValidationError):
+async def validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
     return JSONResponse(
         status_code=400,
         content={

@@ -1,7 +1,7 @@
 """OpenAI Chat Completions → Anthropic Messages API response translation."""
 
 import json
-from typing import Any
+from typing import Any, Literal, cast
 
 from seven_bridges.models.anthropic import (
     MessagesResponse,
@@ -78,6 +78,9 @@ def openai_to_anthropic(data: dict[str, Any], model_alias: str) -> MessagesRespo
         id=response.id,
         model=model_alias,
         content=content,
-        stop_reason=_openai_finish_to_anthropic(choice.finish_reason),
+        stop_reason=cast(
+            "Literal['end_turn', 'max_tokens', 'stop_sequence', 'tool_use'] | None",
+            _openai_finish_to_anthropic(choice.finish_reason),
+        ),
         usage=_convert_usage(response.usage),
     )

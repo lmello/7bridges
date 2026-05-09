@@ -1,6 +1,7 @@
 """DeepSeek bridge — translates Anthropic Messages API to DeepSeek's OpenAI API."""
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -40,7 +41,7 @@ class DeepSeekBridge(Bridge):
 
             return openai_to_anthropic(response.json(), request.model)
 
-    async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict]:
+    async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
         """Send a streaming request to DeepSeek and yield Anthropic-format events."""
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.stream = True
