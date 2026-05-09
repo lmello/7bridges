@@ -1,6 +1,5 @@
 """FastAPI application entry point."""
 
-import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -14,7 +13,9 @@ from seven_bridges.backends.base import Bridge, BridgeError
 from seven_bridges.backends.deepseek import DeepSeekBridge
 from seven_bridges.backends.kimi import KimiBridge
 from seven_bridges.config import ModelRoute, settings
+from seven_bridges.debug import DebugMiddleware
 from seven_bridges.models.anthropic import MessagesRequest
+from seven_bridges.translation.stream import translate_openai_stream
 
 
 @asynccontextmanager
@@ -28,6 +29,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.add_middleware(DebugMiddleware)
 
 
 def _get_bridge(route: ModelRoute) -> Bridge:
@@ -95,15 +97,11 @@ async def messages(
     bridge = _get_bridge(route)
 
     if anthropic_request.stream:
-
-        async def event_stream() -> AsyncIterator[str]:
-            stream = bridge.chat_stream(anthropic_request)
-            async for event in stream:
-                yield f"event: {event.get('type', 'message')}\ndata: {json.dumps(event)}\n\n"
-            yield "event: message_stop\ndata: {}\n\n"
+        stream = bridge.chat_stream(anthropic_request)
+        translated = translate_openai_stream(stream, route.alias)
 
         return StreamingResponse(
-            event_stream(),
+            translated,
             media_type="text/event-stream",
             headers={
                 "Content-Type": "text/event-stream",
