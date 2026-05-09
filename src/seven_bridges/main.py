@@ -136,6 +136,11 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.head("/")
+async def head_root() -> Response:
+    return Response(status_code=200)
+
+
 @app.exception_handler(BridgeError)
 async def bridge_error_handler(request: Request, exc: BridgeError) -> JSONResponse:
     return JSONResponse(
