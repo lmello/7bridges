@@ -4,6 +4,7 @@ import json
 import os
 import time
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,12 @@ def _ensure_debug_dir() -> None:
 
 
 class DebugMiddleware(BaseHTTPMiddleware):
-    """Capture request/response bodies and write them to per-session JSONL files."""
+    """Capture request/response bodies and write them to per-session JSONL files.
+
+    Every request gets a unique session_id. Both request and response are
+    written to the same JSONL file so you can follow a single conversation
+    end-to-end.
+    """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if not DEBUG_ENABLED:
@@ -30,7 +36,7 @@ class DebugMiddleware(BaseHTTPMiddleware):
         session_id = str(uuid.uuid4())[:8]
         started_at = time.time()
 
-        # Capture request body
+        # Capture request body for all methods that might have one
         body_bytes = b""
         if request.method in ("POST", "PUT", "PATCH"):
             body_bytes = await request.body()
@@ -53,12 +59,12 @@ class DebugMiddleware(BaseHTTPMiddleware):
             "session_id": session_id,
             "method": request.method,
             "path": request.url.path,
-            "query": str(request.query_params),
+            "query": str(request.query_params) if request.query_params else None,
             "headers": dict(request.headers.items()),
             "body": req_body,
         }
 
-        # Write request line
+        # Write request line immediately so logs exist even if handler crashes
         log_path = DEBUG_DIR / f"{session_id}.jsonl"
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(request_entry, ensure_ascii=False, default=str) + "\n")
@@ -69,26 +75,10 @@ class DebugMiddleware(BaseHTTPMiddleware):
 
         # Capture response body
         resp_body: object = None
-        if isinstance(response, StreamingResponse):
-            resp_body = "<streaming_response>"
+        if self._is_streaming_response(response):
+            resp_body = await self._capture_streaming_response(response, log_path)
         else:
-            resp_body_bytes = b""
-            body_iter = getattr(response, "body_iterator", None)
-            if body_iter is not None:
-                async for chunk in body_iter:
-                    resp_body_bytes += chunk
-            # Rebuild response so client still gets it
-            response = Response(
-                content=resp_body_bytes,
-                status_code=response.status_code,
-                headers=dict(response.headers.items()),
-                media_type=response.media_type,
-            )
-            try:
-                resp_body = json.loads(resp_body_bytes) if resp_body_bytes else None
-            except json.JSONDecodeError:
-                text = resp_body_bytes.decode("utf-8", errors="replace")
-                resp_body = text if resp_body_bytes else None
+            resp_body, response = await self._capture_response_body(response)
 
         response_entry = {
             "type": "response",
@@ -104,3 +94,83 @@ class DebugMiddleware(BaseHTTPMiddleware):
             f.write(json.dumps(response_entry, ensure_ascii=False, default=str) + "\n")
 
         return response
+
+    def _is_streaming_response(self, response: Response) -> bool:
+        """Check if a response is streaming.
+
+        Starlette's BaseHTTPMiddleware wraps StreamingResponse in an internal
+        _StreamingResponse class, so isinstance() alone is not reliable.
+        """
+        if isinstance(response, StreamingResponse):
+            return True
+        body_iter = getattr(response, "body_iterator", None)
+        return body_iter is not None and hasattr(body_iter, "__aiter__")
+
+    async def _capture_streaming_response(
+        self,
+        response: Response,
+        log_path: Path,
+    ) -> str:
+        """Consume a StreamingResponse, log the full text, and rebuild it.
+
+        Returns the captured body text for the response entry.
+        """
+        chunks: list[bytes] = []
+        body_iter = getattr(response, "body_iterator", None)
+        if body_iter is not None:
+            async for raw in body_iter:
+                if isinstance(raw, bytes):
+                    chunks.append(raw)
+                elif isinstance(raw, str):
+                    chunks.append(raw.encode("utf-8"))
+                else:
+                    # memoryview or other buffer protocol
+                    chunks.append(bytes(raw))
+
+        body_bytes = b"".join(chunks)
+
+        # Also write an intermediate "stream_body" entry with the raw SSE text
+        # so you can inspect the full response without scrolling through deltas
+        stream_entry = {
+            "type": "stream_body",
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%f"),
+            "content_length": len(body_bytes),
+            "text": body_bytes.decode("utf-8", errors="replace"),
+        }
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(stream_entry, ensure_ascii=False, default=str) + "\n")
+
+        # Rebuild the response so the client still receives the stream
+        async def _replay() -> AsyncIterator[bytes]:
+            for chunk in chunks:
+                yield chunk
+
+        setattr(response, "body_iterator", _replay())  # noqa: B010  # type: ignore[arg-defined]
+        return f"<streaming_response: {len(body_bytes)} bytes>"
+
+    async def _capture_response_body(self, response: Response) -> tuple[object, Response]:
+        """Capture the body of a non-streaming response.
+
+        Returns (parsed_body, rebuilt_response).
+        """
+        body_bytes = b""
+        body_iter = getattr(response, "body_iterator", None)
+        if body_iter is not None:
+            async for chunk in body_iter:
+                body_bytes += chunk
+
+        # Rebuild response so client still gets it
+        rebuilt = Response(
+            content=body_bytes,
+            status_code=response.status_code,
+            headers=dict(response.headers.items()),
+            media_type=response.media_type,
+        )
+
+        if not body_bytes:
+            return None, rebuilt
+
+        try:
+            return json.loads(body_bytes), rebuilt
+        except json.JSONDecodeError:
+            return body_bytes.decode("utf-8", errors="replace"), rebuilt

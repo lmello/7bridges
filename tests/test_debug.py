@@ -36,7 +36,8 @@ def test_debug_middleware_captures_request_response(debug_client, tmp_path):
     assert debug_file.suffix == ".jsonl"
 
     lines = debug_file.read_text().strip().split("\n")
-    assert len(lines) == 2
+    # request + stream_body + response
+    assert len(lines) == 3
 
     request_line = json.loads(lines[0])
     assert request_line["type"] == "request"
@@ -44,7 +45,13 @@ def test_debug_middleware_captures_request_response(debug_client, tmp_path):
     assert request_line["path"] == "/v1/messages"
     assert request_line["body"]["model"] == "not-a-real-model"
 
-    response_line = json.loads(lines[1])
+    stream_body_line = json.loads(lines[1])
+    assert stream_body_line["type"] == "stream_body"
+    assert "text" in stream_body_line
+
+    response_line = json.loads(lines[2])
     assert response_line["type"] == "response"
     assert response_line["status_code"] == 400
     assert "duration_ms" in response_line
+    # Streaming placeholder, not the actual text
+    assert "streaming_response" in response_line["body"]

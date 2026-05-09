@@ -151,10 +151,22 @@ async def list_models(request: Request) -> dict[str, Any]:
     return await _list_models()
 
 
+@app.head("/v1/models")
+async def head_list_models(request: Request) -> Response:
+    """HEAD support for /v1/models — Claude Code probes endpoints."""
+    return Response(status_code=200)
+
+
 @app.get("/models")
 async def list_models_alias(request: Request) -> dict[str, Any]:
     """Alias for /v1/models (some clients hit /models directly)."""
     return await _list_models()
+
+
+@app.head("/models")
+async def head_list_models_alias(request: Request) -> Response:
+    """HEAD support for /models alias."""
+    return Response(status_code=200)
 
 
 @app.get("/health")
@@ -162,8 +174,21 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.head("/health")
+async def head_health() -> Response:
+    """HEAD support for /health — Claude Code connectivity checks."""
+    return Response(status_code=200)
+
+
 @app.head("/")
 async def head_root() -> Response:
+    """HEAD support for root — Claude Code connectivity checks."""
+    return Response(status_code=200)
+
+
+@app.head("/v1/messages")
+async def head_messages() -> Response:
+    """HEAD support for /v1/messages — Claude Code probes before POST."""
     return Response(status_code=200)
 
 
