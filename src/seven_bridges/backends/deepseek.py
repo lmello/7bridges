@@ -40,24 +40,25 @@ class DeepSeekBridge(Bridge):
 
             return openai_to_anthropic(response.json(), request.model)
 
-    async def chat_stream(
-        self, request: MessagesRequest
-    ) -> AsyncIterator[dict]:
+    async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict]:
         """Send a streaming request to DeepSeek and yield Anthropic-format events."""
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.stream = True
 
-        async with httpx.AsyncClient() as client, client.stream(
-            "POST",
-            f"{self.api_base}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "Accept": "text/event-stream",
-            },
-            json=openai_request.model_dump(exclude_none=True),
-            timeout=300.0,
-        ) as response:
+        async with (
+            httpx.AsyncClient() as client,
+            client.stream(
+                "POST",
+                f"{self.api_base}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "text/event-stream",
+                },
+                json=openai_request.model_dump(exclude_none=True),
+                timeout=300.0,
+            ) as response,
+        ):
             if response.status_code != 200:
                 body = await response.aread()
                 raise BridgeError(

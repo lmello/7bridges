@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 # Content blocks
 # ---------------------------------------------------------------------------
 
+
 class TextBlock(BaseModel):
     type: Literal["text"] = "text"
     text: str
@@ -47,6 +48,7 @@ ContentBlock = TextBlock | ThinkingBlock | RedactedThinkingBlock | ToolUseBlock 
 # Messages
 # ---------------------------------------------------------------------------
 
+
 class Message(BaseModel):
     role: Literal["user", "assistant"]
     content: str | list[ContentBlock]
@@ -55,6 +57,7 @@ class Message(BaseModel):
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
+
 
 class ToolInputSchema(BaseModel):
     type: Literal["object"] = "object"
@@ -71,6 +74,7 @@ class Tool(BaseModel):
 # ---------------------------------------------------------------------------
 # Request
 # ---------------------------------------------------------------------------
+
 
 class MessagesRequest(BaseModel):
     model: str
@@ -90,6 +94,7 @@ class MessagesRequest(BaseModel):
 # Usage
 # ---------------------------------------------------------------------------
 
+
 class Usage(BaseModel):
     input_tokens: int
     output_tokens: int
@@ -100,6 +105,7 @@ class Usage(BaseModel):
 # ---------------------------------------------------------------------------
 # Response
 # ---------------------------------------------------------------------------
+
 
 class MessagesResponse(BaseModel):
     id: str
@@ -115,6 +121,7 @@ class MessagesResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Streaming
 # ---------------------------------------------------------------------------
+
 
 class ContentBlockDelta(BaseModel):
     type: Literal["text_delta", "thinking_delta", "signature_delta", "input_json_delta"]

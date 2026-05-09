@@ -91,6 +91,7 @@ async def messages(
     bridge = _get_bridge(route)
 
     if anthropic_request.stream:
+
         async def event_stream():
             async for event in bridge.chat_stream(anthropic_request):
                 yield f"event: {event.get('type', 'message')}\ndata: {json.dumps(event)}\n\n"

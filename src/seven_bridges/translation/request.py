@@ -1,5 +1,6 @@
 """Anthropic Messages API → OpenAI Chat Completions request translation."""
 
+import json
 from typing import Any
 
 from seven_bridges.models.anthropic import (
@@ -7,6 +8,7 @@ from seven_bridges.models.anthropic import (
     Message,
     MessagesRequest,
     TextBlock,
+    ThinkingBlock,
     Tool,
     ToolResultBlock,
     ToolUseBlock,
@@ -36,9 +38,10 @@ def _anthropic_content_to_str(content: str | list[ContentBlock]) -> str:
                 tool_text = tool_content or ""
             parts.append(f"<tool_result id={block.tool_use_id}>\n{tool_text}\n</tool_result>")
         elif isinstance(block, ToolUseBlock):
-            parts.append(f"<tool_use id={block.id} name={block.name}>\n{block.input}\n</tool_use>")
-        else:
-            # Thinking blocks etc — drop them for OpenAI
+            args = json.dumps(block.input)
+            parts.append(f"<tool_use id={block.id} name={block.name}>\n{args}\n</tool_use>")
+        elif isinstance(block, ThinkingBlock):
+            # Don't render thinking in content string; it's handled separately
             pass
     return "\n".join(parts)
 
@@ -63,13 +66,12 @@ def _convert_messages(messages: list[Message]) -> list[dict[str, Any]]:
                                 "type": "function",
                                 "function": {
                                     "name": block.name,
-                                    "arguments": block.input,
+                                    "arguments": json.dumps(block.input),
                                 },
                             }
                         )
-                    # Extract reasoning_content if present at top level or in provider fields
-                    if isinstance(block, dict) and block.get("reasoning_content"):
-                        reasoning_content = block["reasoning_content"]
+                    elif isinstance(block, ThinkingBlock):
+                        reasoning_content = block.thinking
 
             openai_msg: dict[str, Any] = {"role": "assistant"}
             if content:
@@ -101,9 +103,7 @@ def _convert_tools(tools: list[Tool] | None) -> list[ChatCompletionTool] | None:
     ]
 
 
-def _convert_tool_choice(
-    tool_choice: str | dict[str, Any] | None
-) -> str | dict[str, Any] | None:
+def _convert_tool_choice(tool_choice: str | dict[str, Any] | None) -> str | dict[str, Any] | None:
     """Convert Anthropic tool_choice to OpenAI format."""
     if tool_choice is None:
         return None

@@ -1,5 +1,6 @@
 """OpenAI Chat Completions → Anthropic Messages API response translation."""
 
+import json
 from typing import Any
 
 from seven_bridges.models.anthropic import (
@@ -60,11 +61,16 @@ def openai_to_anthropic(data: dict[str, Any], model_alias: str) -> MessagesRespo
     # Tool calls
     if msg.tool_calls:
         for tc in msg.tool_calls:
+            raw_args = tc["function"].get("arguments", "{}")
+            try:
+                parsed_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except json.JSONDecodeError:
+                parsed_args = {}
             content.append(
                 ToolUseBlock(
                     id=tc["id"],
                     name=tc["function"]["name"],
-                    input=tc["function"].get("arguments", {}),
+                    input=parsed_args,
                 )
             )
 

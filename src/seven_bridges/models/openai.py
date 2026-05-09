@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 # Messages
 # ---------------------------------------------------------------------------
 
+
 class SystemMessage(BaseModel):
     role: Literal["system"] = "system"
     content: str
@@ -41,6 +42,7 @@ ChatMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 # Tools
 # ---------------------------------------------------------------------------
 
+
 class FunctionDefinition(BaseModel):
     name: str
     description: str | None = None
@@ -56,6 +58,7 @@ class ChatCompletionTool(BaseModel):
 # ---------------------------------------------------------------------------
 # Request
 # ---------------------------------------------------------------------------
+
 
 class ChatCompletionRequest(BaseModel):
     model: str
@@ -76,6 +79,7 @@ class ChatCompletionRequest(BaseModel):
 # Usage
 # ---------------------------------------------------------------------------
 
+
 class CompletionUsage(BaseModel):
     prompt_tokens: int
     completion_tokens: int
@@ -88,6 +92,7 @@ class CompletionUsage(BaseModel):
 # ---------------------------------------------------------------------------
 # Response
 # ---------------------------------------------------------------------------
+
 
 class Choice(BaseModel):
     index: int = 0
@@ -107,6 +112,7 @@ class ChatCompletionResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Streaming
 # ---------------------------------------------------------------------------
+
 
 class DeltaMessage(BaseModel):
     role: Literal["assistant"] | None = None

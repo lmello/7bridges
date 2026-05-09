@@ -32,15 +32,11 @@ class Bridge(ABC):
         self.api_base = api_base or self.default_api_base
 
     @abstractmethod
-    async def chat(
-        self, request: MessagesRequest
-    ) -> MessagesResponse:
+    async def chat(self, request: MessagesRequest) -> MessagesResponse:
         """Send a non-streaming chat request and return the translated response."""
         ...
 
     @abstractmethod
-    async def chat_stream(
-        self, request: MessagesRequest
-    ) -> AsyncIterator[dict]:
+    async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict]:
         """Send a streaming chat request and yield Anthropic-format SSE events."""
         ...
