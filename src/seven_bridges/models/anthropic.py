@@ -79,7 +79,7 @@ class Tool(BaseModel):
 class MessagesRequest(BaseModel):
     model: str
     messages: list[Message]
-    max_tokens: int = Field(default=4096, le=8192)
+    max_tokens: int = Field(default=4096)
     system: str | list[TextBlock] | None = None
     metadata: dict[str, Any] | None = None
     stop_sequences: list[str] | None = None

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import ValidationError
 
 from seven_bridges.backends.base import Bridge, BridgeError
 from seven_bridges.backends.deepseek import DeepSeekBridge
@@ -142,6 +143,20 @@ async def bridge_error_handler(request: Request, exc: BridgeError):
             "error": {
                 "type": exc.error_type,
                 "message": exc.message,
+            },
+        },
+    )
+
+
+@app.exception_handler(ValidationError)
+async def validation_error_handler(request: Request, exc: ValidationError):
+    return JSONResponse(
+        status_code=400,
+        content={
+            "type": "error",
+            "error": {
+                "type": "invalid_request_error",
+                "message": str(exc),
             },
         },
     )

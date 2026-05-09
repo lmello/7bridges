@@ -13,6 +13,7 @@ module.exports = {
     max_restarts: 10,
     min_uptime: '10s',
     restart_delay: 5000,
+    max_memory_restart: '512M',
     watch: false,
     env: {
       PYTHONPATH: 'src',
