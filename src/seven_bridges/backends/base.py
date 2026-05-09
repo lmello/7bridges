@@ -1,0 +1,46 @@
+"""Abstract base class for backend bridges."""
+
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+
+from seven_bridges.models.anthropic import MessagesRequest, MessagesResponse
+
+
+class BridgeError(Exception):
+    """Error raised by a bridge during request/response handling."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 500,
+        error_type: str = "api_error",
+    ):
+        self.message = message
+        self.status_code = status_code
+        self.error_type = error_type
+        super().__init__(message)
+
+
+class Bridge(ABC):
+    """Abstract base class for translating between Anthropic and a native backend."""
+
+    name: str = ""
+    default_api_base: str = ""
+
+    def __init__(self, api_key: str, api_base: str | None = None):
+        self.api_key = api_key
+        self.api_base = api_base or self.default_api_base
+
+    @abstractmethod
+    async def chat(
+        self, request: MessagesRequest
+    ) -> MessagesResponse:
+        """Send a non-streaming chat request and return the translated response."""
+        ...
+
+    @abstractmethod
+    async def chat_stream(
+        self, request: MessagesRequest
+    ) -> AsyncIterator[dict]:
+        """Send a streaming chat request and yield Anthropic-format SSE events."""
+        ...

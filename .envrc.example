@@ -1,0 +1,4 @@
+export DEEPSEEK_API_KEY=
+export KIMI_CODE_API_KEY=
+export BRIDGE_API_KEY=ollama
+PATH_add .venv/bin
