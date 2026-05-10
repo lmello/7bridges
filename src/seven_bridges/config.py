@@ -48,6 +48,17 @@ class Settings:
             context_window=262_144,
             max_output_tokens=32_768,
         ),
+        # Claude Code internal fallback aliases (used for background tasks
+        # like session title generation when ANTHROPIC_DEFAULT_HAIKU_MODEL
+        # is set in another shell)
+        "claude-haiku-4-5-20251001": ModelRoute(
+            alias="claude-haiku-4-5-20251001",
+            bridge="deepseek",
+            backend_model="deepseek-v4-flash",
+            display_name="Claude Haiku 4.5-20251001 (DeepSeek V4 Flash)",
+            context_window=1_048_576,
+            max_output_tokens=393_216,
+        ),
     }
 
     # Bedrock-style variants map to the same routes
