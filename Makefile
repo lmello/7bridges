@@ -33,7 +33,10 @@ tail-logs:
 	@bash -c 'cd logs/debug && tail -f $$(ls -t *.jsonl | head -1) | jq --unbuffered .'
 
 test:
-	.venv/bin/pytest tests/ -v
+	.venv/bin/pytest tests/ -v --ignore=tests/agent-inference
+
+test-agent:
+	.venv/bin/pytest tests/agent-inference/ -v
 
 test-unit:
 	.venv/bin/pytest tests/test_translation.py tests/test_streaming.py -v
