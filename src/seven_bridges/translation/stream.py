@@ -5,6 +5,8 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from seven_bridges.models.anthropic import _SIGNATURE_PLACEHOLDER
+
 
 def _make_sse(event_type: str, data: dict[str, Any]) -> str:
     """Format a dict as an SSE event string."""
@@ -103,7 +105,11 @@ async def translate_openai_stream(
                     {
                         "type": "content_block_start",
                         "index": open_block_index,
-                        "content_block": {"type": "thinking", "thinking": "", "signature": ""},
+                        "content_block": {
+                            "type": "thinking",
+                            "thinking": "",
+                            "signature": _SIGNATURE_PLACEHOLDER,
+                        },
                     },
                 )
             yield _make_sse(

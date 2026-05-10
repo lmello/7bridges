@@ -8,6 +8,16 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# Anthropic cryptographically signs thinking blocks for multi-turn continuity.
+# Upstream vendors (Kimi, DeepSeek, etc.) do not provide signatures.
+# Claude Code requires signature to be a non-null string, so we use an empty
+# string as a placeholder. This is a vendor limitation, not a bridge bug.
+_SIGNATURE_PLACEHOLDER: str = ""
+
+# ---------------------------------------------------------------------------
 # Content blocks
 # ---------------------------------------------------------------------------
 
@@ -20,7 +30,7 @@ class TextBlock(BaseModel):
 class ThinkingBlock(BaseModel):
     type: Literal["thinking"] = "thinking"
     thinking: str
-    signature: str = ""
+    signature: str = _SIGNATURE_PLACEHOLDER
 
 
 class RedactedThinkingBlock(BaseModel):

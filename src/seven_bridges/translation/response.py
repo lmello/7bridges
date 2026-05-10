@@ -4,6 +4,7 @@ import json
 from typing import Any, Literal, cast
 
 from seven_bridges.models.anthropic import (
+    _SIGNATURE_PLACEHOLDER,
     MessagesResponse,
     TextBlock,
     ThinkingBlock,
@@ -52,7 +53,9 @@ def openai_to_anthropic(data: dict[str, Any], model_alias: str) -> MessagesRespo
 
     # Reasoning content comes first (if present)
     if msg.reasoning_content:
-        content.append(ThinkingBlock(thinking=msg.reasoning_content, signature=""))
+        content.append(
+            ThinkingBlock(thinking=msg.reasoning_content, signature=_SIGNATURE_PLACEHOLDER)
+        )
 
     # Main text content
     if msg.content:
