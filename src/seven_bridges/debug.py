@@ -17,6 +17,7 @@ from starlette.responses import Response, StreamingResponse
 DEBUG_DIR = Path(__file__).parent.parent.parent / "logs" / "debug"
 DEBUG_ENABLED = os.environ.get("BRIDGE_DEBUG", "").lower() in ("1", "true", "yes")
 _MAX_DEBUG_FILES = 100
+_MAX_BODY_LOG_BYTES = 50_000  # Cap logged request bodies to ~50 KB
 
 
 def _ensure_debug_dir() -> None:
@@ -67,6 +68,26 @@ class DebugMiddleware(BaseHTTPMiddleware):
         except json.JSONDecodeError:
             req_body = body_bytes.decode("utf-8", errors="replace") if body_bytes else None
 
+        # Truncate large request bodies to keep logs readable
+        logged_body: object = req_body
+        body_size = len(body_bytes) if body_bytes else 0
+        if body_size > _MAX_BODY_LOG_BYTES:
+            if isinstance(req_body, dict):
+                msg_count = len(req_body.get("messages", []))
+                logged_body = {
+                    "_truncated": True,
+                    "_original_bytes": body_size,
+                    "model": req_body.get("model"),
+                    "message_count": msg_count,
+                    "stream": req_body.get("stream"),
+                    "max_tokens": req_body.get("max_tokens"),
+                    "last_message_preview": str(req_body.get("messages", [])[-1])[:500]
+                    if msg_count > 0
+                    else None,
+                }
+            else:
+                logged_body = f"<truncated: {body_size} bytes>"
+
         request_entry = {
             "type": "request",
             "timestamp": datetime.now(UTC).isoformat(),
@@ -75,7 +96,7 @@ class DebugMiddleware(BaseHTTPMiddleware):
             "path": request.url.path,
             "query": str(request.query_params) if request.query_params else None,
             "headers": dict(request.headers.items()),
-            "body": req_body,
+            "body": logged_body,
         }
 
         # Write request line immediately so logs exist even if handler crashes
@@ -181,13 +202,18 @@ class DebugMiddleware(BaseHTTPMiddleware):
 
         # Also write an intermediate "stream_body" entry with the raw SSE text
         # so you can inspect the full response without scrolling through deltas
+        text = body_bytes.decode("utf-8", errors="replace")
+        # Cap stream text to keep logs manageable
+        if len(text) > _MAX_BODY_LOG_BYTES:
+            text = text[:_MAX_BODY_LOG_BYTES] + f"\n... <truncated: {len(text)} chars total>"
+
         stream_entry = {
             "type": "stream_body",
             "timestamp": datetime.now(UTC).isoformat(),
             "content_length": len(body_bytes),
             "handler_latency_ms": round((handler_done_at - started_at) * 1000, 2),
             "stream_duration_ms": round((stream_end_at - stream_start_at) * 1000, 2),
-            "text": body_bytes.decode("utf-8", errors="replace"),
+            "text": text,
         }
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(stream_entry, ensure_ascii=False, default=str) + "\n")

@@ -14,9 +14,38 @@ from seven_bridges.backends.deepseek import DeepSeekBridge
 from seven_bridges.backends.kimi import KimiBridge
 from seven_bridges.config import ModelRoute, settings
 from seven_bridges.debug import DebugMiddleware
-from seven_bridges.models.anthropic import MessagesRequest
+from seven_bridges.models.anthropic import (
+    CountTokensRequest,
+    CountTokensResponse,
+    MessagesRequest,
+)
 from seven_bridges.translation.request import request_has_images
 from seven_bridges.translation.stream import translate_openai_stream
+
+
+def _estimate_tokens(obj: Any) -> int:
+    """Rough token count estimate for count_tokens endpoint.
+
+    Uses ~4 chars per token heuristic. Good enough for Claude Code's
+    statusline display; not for billing.
+    """
+    text = ""
+    if isinstance(obj, str):
+        text = obj
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, dict):
+                text += item.get("text", "")
+                text += item.get("content", "")
+                text += item.get("thinking", "")
+            elif isinstance(item, str):
+                text += item
+    elif isinstance(obj, dict):
+        text += obj.get("text", "")
+        text += obj.get("content", "")
+        text += obj.get("thinking", "")
+    # ~4 chars per token for English/code, plus overhead
+    return max(1, len(text) // 4 + len(text) // 100)
 
 
 @asynccontextmanager
@@ -129,6 +158,53 @@ async def messages(
         return JSONResponse(content=response.model_dump())
 
 
+@app.post("/v1/messages/count_tokens")
+async def count_tokens(
+    request: Request,
+    x_api_key: str = Header(default=""),
+) -> JSONResponse:
+    """Count tokens in a message batch (local estimation).
+
+    Upstream vendors (DeepSeek, Kimi) do not expose a native token-count API.
+    We use a heuristic (~4 chars/token) sufficient for Claude Code's
+    statusline display. Not for billing.
+    """
+    if x_api_key != settings.api_key:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "type": "error",
+                "error": {"type": "authentication_error", "message": "Invalid API key"},
+            },
+        )
+
+    body = await request.json()
+    try:
+        req = CountTokensRequest.model_validate(body)
+    except ValidationError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "type": "error",
+                "error": {"type": "invalid_request_error", "message": str(exc)},
+            },
+        )
+
+    total = 0
+    # Messages
+    for msg in req.messages:
+        total += _estimate_tokens(msg.content)
+    # System prompt
+    if req.system:
+        total += _estimate_tokens(req.system)
+    # Tools schema (rough: ~50 tokens per tool)
+    if req.tools:
+        total += len(req.tools) * 50
+
+    resp = CountTokensResponse(input_tokens=total)
+    return JSONResponse(content=resp.model_dump())
+
+
 async def _list_models() -> dict[str, Any]:
     """List available models (Anthropic compatible)."""
     models: list[dict[str, Any]] = []
@@ -141,6 +217,8 @@ async def _list_models() -> dict[str, Any]:
                     "type": "model",
                     "id": route.alias,
                     "display_name": route.display_name,
+                    "context_window": route.context_window,
+                    "max_output_tokens": route.max_output_tokens,
                 }
             )
     return {"data": models, "has_more": False, "first_id": None, "last_id": None}

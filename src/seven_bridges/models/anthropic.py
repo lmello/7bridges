@@ -181,3 +181,20 @@ class MessageDeltaEvent(BaseModel):
 
 class MessageStopEvent(BaseModel):
     type: Literal["message_stop"] = "message_stop"
+
+
+# ---------------------------------------------------------------------------
+# Count tokens
+# ---------------------------------------------------------------------------
+
+
+class CountTokensRequest(BaseModel):
+    model: str
+    messages: list[Message]
+    system: str | list[TextBlock] | None = None
+    tools: list[Tool] | None = None
+    tool_choice: Literal["auto", "any", "none"] | dict[str, Any] | None = None
+
+
+class CountTokensResponse(BaseModel):
+    input_tokens: int

@@ -76,6 +76,16 @@ async def translate_openai_stream(
                     cache_read = usage["cached_tokens"]
             continue
 
+        # Some providers attach usage to the final chunk that also contains choices
+        usage = chunk.get("usage")
+        if usage:
+            input_tokens = usage.get("prompt_tokens", input_tokens)
+            output_tokens = usage.get("completion_tokens", output_tokens)
+            if usage.get("prompt_cache_hit_tokens"):
+                cache_read = usage["prompt_cache_hit_tokens"]
+            elif usage.get("cached_tokens"):
+                cache_read = usage["cached_tokens"]
+
         delta = choices[0].get("delta", {})
         finish = choices[0].get("finish_reason")
 

@@ -60,6 +60,10 @@ class ChatCompletionTool(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class StreamOptions(BaseModel):
+    include_usage: bool | None = None
+
+
 class ChatCompletionRequest(BaseModel):
     model: str
     messages: list[dict[str, Any]]
@@ -73,6 +77,7 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
     user: str | None = None
+    stream_options: StreamOptions | None = None
 
 
 # ---------------------------------------------------------------------------

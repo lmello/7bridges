@@ -73,6 +73,9 @@ class KimiBridge(Bridge):
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.model = self.backend_model
         openai_request.stream = True
+        from seven_bridges.models.openai import StreamOptions
+
+        openai_request.stream_options = StreamOptions(include_usage=True)
 
         async with (
             httpx.AsyncClient() as client,
