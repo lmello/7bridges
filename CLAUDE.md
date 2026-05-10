@@ -11,7 +11,7 @@ This is an **Anthropic Messages API proxy** — a translation layer, not a gener
 ### 1. Small, Tested Changes
 
 - **One concern per commit.** A commit should touch either translation logic, a backend, tests, or docs — not all four at once unless the change is trivial.
-- **Never commit without running tests.** The pre-commit gate requires 80% coverage and all 50 tests passing.
+- **Never commit without running tests.** The pre-commit gate requires 80% coverage and all 58 tests passing.
 - **Prefer fixing over adding.** If a feature can be achieved by tightening existing translation rather than adding new endpoints, do that.
 
 ### 2. Test-First for Translation Logic
@@ -74,7 +74,7 @@ Rules are strict (`mypy --strict`, `ruff` with `UP` and `B` rules). Type ignores
 2. **ruff check** — lint must pass
 3. **ruff format** — auto-format
 4. **mypy** — strict type checking
-5. **pytest** — all 50 tests, 80% coverage gate
+5. **pytest** — all 58 tests, 80% coverage gate
 
 If any step fails, the commit is rejected. Fix and retry.
 
@@ -85,16 +85,17 @@ If any step fails, the commit is rejected. Fix and retry.
 | `src/seven_bridges/translation/` | Request/response/stream mapping | Unit-test every branch |
 | `src/seven_bridges/backends/` | HTTP clients + capability flags | E2E test + capability audit |
 | `src/seven_bridges/models/` | Pydantic schemas | Only add fields; never remove without deprecation |
-| `src/seven_bridges/debug.py` | Request/response logging | Keep structure stable |
+| `src/seven_bridges/debug.py` | Request/response logging + error handling + log cleanup | Keep structure stable; rebuild StreamingResponse properly, never mutate internals |
 | `tests/` | All tests | Mirror the source structure |
 | `docs/` | Architecture diagrams, API specs | Update when behavior changes |
 
 ## Common Pitfalls
 
-- **Thinking signatures:** Anthropic cryptographically signs thinking blocks. Upstream vendors don't. The bridge returns `signature=""`. Do not attempt to generate fake signatures — Claude Code accepts empty ones.
+- **Thinking signatures:** Anthropic cryptographically signs thinking blocks. Upstream vendors don't. The bridge uses `_SIGNATURE_PLACEHOLDER` (empty string) consistently across `models/`, `translation/stream.py`, and `translation/response.py`. Do not attempt to generate fake signatures — Claude Code accepts empty ones.
 - **SSE format variance:** Kimi sends `data:{...}` (no space). DeepSeek sends `data: {...}`. The parser handles both; never tighten the parser to assume one format.
 - **Image flattening:** When a `tool_result` contains images, they must be flattened into separate `image_url` content blocks in the OpenAI request. Do not nest them under the tool result.
-- **StreamingResponse internals:** `BaseHTTPMiddleware` wraps `StreamingResponse` in a private `_StreamingResponse` class. `isinstance()` is unreliable; use `_is_streaming_response()` in `debug.py`.
+- **Tool result translation:** In the Anthropic API, `tool_result` blocks live inside user-role messages. OpenAI requires them as separate `role: "tool"` messages with `tool_call_id`, placed immediately after the assistant's `tool_calls`. `_convert_messages()` in `request.py` extracts `ToolResultBlock`s and emits them as `tool` role dicts. Any remaining text/image content stays in a separate `user` message. Never fold tool results into user message text.
+- **StreamingResponse internals:** `BaseHTTPMiddleware` wraps `StreamingResponse` in a private `_StreamingResponse` class. `isinstance()` is unreliable; use `_is_streaming_response()` in `debug.py`. When rebuilding a stream after capture, construct a new `StreamingResponse` with the replay generator — do not mutate `body_iterator` directly.
 
 ## Commit Messages
 
