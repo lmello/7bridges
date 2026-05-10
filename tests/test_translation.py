@@ -417,3 +417,131 @@ def test_openai_to_anthropic_finish_reason_mapping():
         }
         resp = openai_to_anthropic(data, "claude-sonnet-4-6")
         assert resp.stop_reason == anthropic_reason
+
+
+# ---------------------------------------------------------------------------
+# Tool result → OpenAI tool role message tests
+# ---------------------------------------------------------------------------
+
+
+def test_anthropic_to_openai_tool_result_becomes_tool_role_message():
+    """ToolResultBlock in a user message must become a 'tool' role message."""
+    req = MessagesRequest(
+        model="claude-opus-4-6",
+        messages=[
+            Message(
+                role="assistant",
+                content=[
+                    TextBlock(text="I'll read that for you."),
+                    ToolUseBlock(
+                        id="call_abc123",
+                        name="Read",
+                        input={"file_path": "/tmp/foo.py"},
+                    ),
+                ],
+            ),
+            Message(
+                role="user",
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="call_abc123",
+                        content="print('hello')",
+                        is_error=False,
+                    ),
+                ],
+            ),
+        ],
+        max_tokens=100,
+    )
+    openai_req = anthropic_to_openai(req, "kimi")
+
+    # Should be: assistant with tool_calls, then tool message, no trailing user
+    assert len(openai_req.messages) == 2
+    assert openai_req.messages[0]["role"] == "assistant"
+    assert openai_req.messages[0]["tool_calls"] == [
+        {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "arguments": json.dumps({"file_path": "/tmp/foo.py"}),
+            },
+        }
+    ]
+    assert openai_req.messages[1]["role"] == "tool"
+    assert openai_req.messages[1]["tool_call_id"] == "call_abc123"
+    assert openai_req.messages[1]["content"] == "print('hello')"
+
+
+def test_anthropic_to_openai_tool_result_with_text_interleaved():
+    """User message with tool_result + trailing text becomes tool + user messages."""
+    req = MessagesRequest(
+        model="claude-opus-4-6",
+        messages=[
+            Message(
+                role="assistant",
+                content=[
+                    ToolUseBlock(
+                        id="call_def456",
+                        name="Bash",
+                        input={"command": "ls"},
+                    ),
+                ],
+            ),
+            Message(
+                role="user",
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="call_def456",
+                        content="file.txt\nfile2.txt",
+                        is_error=False,
+                    ),
+                    TextBlock(text="Now summarize these files."),
+                ],
+            ),
+        ],
+        max_tokens=100,
+    )
+    openai_req = anthropic_to_openai(req, "kimi")
+
+    # Ordering: assistant → tool → user
+    assert len(openai_req.messages) == 3
+    assert openai_req.messages[0]["role"] == "assistant"
+    assert openai_req.messages[1]["role"] == "tool"
+    assert openai_req.messages[1]["tool_call_id"] == "call_def456"
+    assert openai_req.messages[2]["role"] == "user"
+    assert openai_req.messages[2]["content"] == "Now summarize these files."
+
+
+def test_anthropic_to_openai_tool_result_error_flag():
+    """ToolResultBlock with is_error=True prefixes content with [Error]."""
+    req = MessagesRequest(
+        model="claude-opus-4-6",
+        messages=[
+            Message(
+                role="assistant",
+                content=[
+                    ToolUseBlock(
+                        id="call_err789",
+                        name="Bash",
+                        input={"command": "rm /"},
+                    ),
+                ],
+            ),
+            Message(
+                role="user",
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="call_err789",
+                        content="Permission denied",
+                        is_error=True,
+                    ),
+                ],
+            ),
+        ],
+        max_tokens=100,
+    )
+    openai_req = anthropic_to_openai(req, "kimi")
+
+    assert openai_req.messages[1]["role"] == "tool"
+    assert openai_req.messages[1]["content"] == "[Error] Permission denied"

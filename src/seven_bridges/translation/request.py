@@ -139,8 +139,37 @@ def _convert_messages(messages: list[Message]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for msg in messages:
         if msg.role == "user":
-            content = _convert_user_content(msg.content)
-            result.append({"role": "user", "content": content})
+            # Tool results must become separate 'tool' role messages in OpenAI.
+            # Any remaining text/image content stays in a 'user' role message.
+            tool_results: list[dict[str, Any]] = []
+            other_blocks: list[ContentBlock] = []
+
+            content_blocks = msg.content if isinstance(msg.content, list) else []
+            for block in content_blocks:
+                if isinstance(block, ToolResultBlock):
+                    tool_text = _tool_result_to_text(block)
+                    tool_results.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": block.tool_use_id,
+                            "content": tool_text,
+                        }
+                    )
+                else:
+                    other_blocks.append(block)
+
+            # Emit tool results first (required ordering after assistant tool_calls)
+            result.extend(tool_results)
+
+            # Emit remaining user content if any
+            if other_blocks:
+                content = _convert_user_content(other_blocks)
+                result.append({"role": "user", "content": content})
+            elif not tool_results:
+                # Fallback: content was a plain string
+                content = _convert_user_content(msg.content)
+                result.append({"role": "user", "content": content})
+
         elif msg.role == "assistant":
             text_content, tool_calls, reasoning_content = _convert_assistant_content(msg.content)
 
@@ -154,6 +183,28 @@ def _convert_messages(messages: list[Message]) -> list[dict[str, Any]]:
 
             result.append(openai_msg)
     return result
+
+
+def _tool_result_to_text(block: ToolResultBlock) -> str:
+    """Convert a ToolResultBlock content to plain text for OpenAI tool messages."""
+    tool_content = block.content
+    if isinstance(tool_content, list):
+        parts: list[str] = []
+        for item in tool_content:
+            if isinstance(item, TextBlock):
+                parts.append(item.text)
+            elif isinstance(item, ImageBlock):
+                img = _anthropic_image_to_openai(item)
+                if img:
+                    url = img["image_url"]["url"]
+                    parts.append(f"[Image: {url[:80]}...]")
+        text = "\n".join(parts)
+    else:
+        text = tool_content or ""
+
+    if block.is_error:
+        return f"[Error] {text}"
+    return text
 
 
 def request_has_images(request: MessagesRequest) -> bool:
