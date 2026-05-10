@@ -283,3 +283,274 @@ async def test_stream_skips_done_and_empty():
     # Should still produce valid events despite [DONE] and empty lines
     assert events[0][0] == "message_start"
     assert events[-1][0] == "message_stop"
+
+
+# ---------------------------------------------------------------------------
+# Edge-case streaming tests (interleaved thinking + tool calls, multi-tool)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_stream_interleaved_thinking_and_tool_calls():
+    """Model reasons, then emits a tool_use — blocks should close and open correctly."""
+
+    async def raw_stream():
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-123",
+                    "choices": [
+                        {"delta": {"reasoning_content": "Let me check"}, "finish_reason": None}
+                    ],
+                }
+            ),
+        }
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-123",
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {"name": "Read", "arguments": ""},
+                                    }
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                }
+            ),
+        }
+
+    events = await _collect_stream(translate_openai_stream(raw_stream(), "claude-sonnet-4-6"))
+
+    # message_start
+    assert events[0][0] == "message_start"
+
+    # thinking block
+    assert events[1][0] == "content_block_start"
+    assert events[1][1]["content_block"]["type"] == "thinking"
+    assert events[2][0] == "content_block_delta"
+    assert events[2][1]["delta"]["thinking"] == "Let me check"
+    assert events[3][0] == "content_block_stop"
+
+    # tool_use block
+    assert events[4][0] == "content_block_start"
+    assert events[4][1]["content_block"]["type"] == "tool_use"
+    assert events[4][1]["content_block"]["name"] == "Read"
+    assert events[5][0] == "content_block_stop"
+
+    # message_delta with tool_use stop_reason
+    assert events[6][0] == "message_delta"
+    assert events[6][1]["delta"]["stop_reason"] == "tool_use"
+
+    # message_stop
+    assert events[7][0] == "message_stop"
+
+
+@pytest.mark.anyio
+async def test_stream_multiple_tool_calls():
+    """Two distinct tool calls (index 0 and 1) in one response."""
+
+    async def raw_stream():
+        # First tool call starts
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-123",
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_A",
+                                        "type": "function",
+                                        "function": {"name": "Read", "arguments": ""},
+                                    }
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+        }
+        # First tool call gets args
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-123",
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {"index": 0, "function": {"arguments": '{"path": "/tmp"}'}}
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+        }
+        # Second tool call starts
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-123",
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 1,
+                                        "id": "call_B",
+                                        "type": "function",
+                                        "function": {"name": "Bash", "arguments": ""},
+                                    }
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+        }
+        # Second tool call gets args + finish
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-123",
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {"index": 1, "function": {"arguments": '{"command": "ls"}'}}
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                }
+            ),
+        }
+
+    events = await _collect_stream(translate_openai_stream(raw_stream(), "claude-sonnet-4-6"))
+
+    # message_start
+    assert events[0][0] == "message_start"
+
+    # Tool 0 start
+    assert events[1][0] == "content_block_start"
+    assert events[1][1]["content_block"]["id"] == "call_A"
+    assert events[1][1]["content_block"]["name"] == "Read"
+
+    # Tool 0 args delta
+    assert events[2][0] == "content_block_delta"
+    assert events[2][1]["delta"]["partial_json"] == '{"path": "/tmp"}'
+
+    # Tool 0 stop
+    assert events[3][0] == "content_block_stop"
+
+    # Tool 1 start
+    assert events[4][0] == "content_block_start"
+    assert events[4][1]["content_block"]["id"] == "call_B"
+    assert events[4][1]["content_block"]["name"] == "Bash"
+
+    # Tool 1 args delta
+    assert events[5][0] == "content_block_delta"
+    assert events[5][1]["delta"]["partial_json"] == '{"command": "ls"}'
+
+    # Tool 1 stop
+    assert events[6][0] == "content_block_stop"
+
+    # message_delta
+    assert events[7][0] == "message_delta"
+    assert events[7][1]["delta"]["stop_reason"] == "tool_use"
+
+    # message_stop
+    assert events[8][0] == "message_stop"
+
+
+@pytest.mark.anyio
+async def test_stream_tool_calls_with_finish_in_same_chunk():
+    """finish_reason='tool_calls' arrives in same chunk as final tool call arguments."""
+
+    async def raw_stream():
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-123",
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {"name": "Read", "arguments": ""},
+                                    }
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+        }
+        # Final chunk has both arguments AND finish_reason
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-123",
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "function": {"arguments": '{"file": "/etc/passwd"}'},
+                                    }
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                }
+            ),
+        }
+
+    events = await _collect_stream(translate_openai_stream(raw_stream(), "claude-sonnet-4-6"))
+
+    # Tool start
+    assert events[1][0] == "content_block_start"
+    assert events[1][1]["content_block"]["name"] == "Read"
+
+    # Args delta
+    assert events[2][0] == "content_block_delta"
+    assert events[2][1]["delta"]["partial_json"] == '{"file": "/etc/passwd"}'
+
+    # Tool stop
+    assert events[3][0] == "content_block_stop"
+
+    # message_delta with tool_use
+    assert events[4][0] == "message_delta"
+    assert events[4][1]["delta"]["stop_reason"] == "tool_use"
+
+    assert events[5][0] == "message_stop"
