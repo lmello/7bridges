@@ -1,7 +1,10 @@
 """FastAPI application entry point."""
 
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, Request
@@ -62,6 +65,24 @@ app = FastAPI(
 app.add_middleware(DebugMiddleware)
 
 
+def _log_diagnostic(kind: str, request_body: object, details: dict[str, Any]) -> None:
+    """Write diagnostic info for debugging intermittent 400s."""
+    from datetime import datetime
+
+    diag_path = Path(__file__).parent.parent.parent / "logs" / "diagnostics.jsonl"
+    diag_path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "ts": datetime.now(UTC).isoformat(),
+        "kind": kind,
+        "request_preview": request_body
+        if isinstance(request_body, dict)
+        else str(request_body)[:500],
+        "details": details,
+    }
+    with open(diag_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+
+
 def _get_bridge(route: ModelRoute) -> Bridge:
     """Instantiate the correct backend bridge for a model route."""
     kwargs = {
@@ -111,10 +132,16 @@ async def messages(
         )
 
     body = await request.json()
-    anthropic_request = MessagesRequest.model_validate(body)
+    try:
+        anthropic_request = MessagesRequest.model_validate(body)
+    except ValidationError as exc:
+        # Log validation errors for debugging intermittent 400s
+        _log_diagnostic("validation_error", body, {"error": str(exc)})
+        raise
 
     route = settings.model_routes.get(anthropic_request.model)
     if route is None:
+        _log_diagnostic("unknown_model", body, {"model": anthropic_request.model})
         return JSONResponse(
             status_code=400,
             content={
@@ -272,6 +299,11 @@ async def head_messages() -> Response:
 
 @app.exception_handler(BridgeError)
 async def bridge_error_handler(request: Request, exc: BridgeError) -> JSONResponse:
+    _log_diagnostic(
+        "upstream_error",
+        {"url": str(request.url), "method": request.method},
+        {"status": exc.status_code, "type": exc.error_type, "message": exc.message[:500]},
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -286,6 +318,11 @@ async def bridge_error_handler(request: Request, exc: BridgeError) -> JSONRespon
 
 @app.exception_handler(ValidationError)
 async def validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
+    _log_diagnostic(
+        "validation_error_handler",
+        {"url": str(request.url), "method": request.method},
+        {"message": str(exc)[:500]},
+    )
     return JSONResponse(
         status_code=400,
         content={
