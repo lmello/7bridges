@@ -30,7 +30,21 @@ run-debug:
 
 tail-logs:
 	@mkdir -p logs/debug
-	@bash -c 'cd logs/debug && tail -f $$(ls -t *.jsonl | head -1) | jq --unbuffered .'
+	@echo "Following newest debug log (auto-switches on new files)..."
+	@bash -c 'cd logs/debug && \
+		while true; do \
+			newest=$$(ls -t *.jsonl 2>/dev/null | head -1); \
+			[ -z "$$newest" ] && sleep 1 && continue; \
+			echo "==> Tailing: $$newest" >&2; \
+			tail -n0 -f "$$newest" & pid=$$!; \
+			while [ "$$(ls -t *.jsonl 2>/dev/null | head -1)" = "$$newest" ]; do \
+				sleep 1; \
+			done; \
+			kill $$pid 2>/dev/null; \
+			wait $$pid 2>/dev/null; \
+			echo "==> Newer log detected, switching..." >&2; \
+		done \
+	' | jq --unbuffered .
 
 test:
 	.venv/bin/pytest tests/ -v --ignore=tests/agent-inference
