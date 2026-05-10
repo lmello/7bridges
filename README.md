@@ -2,6 +2,8 @@
 
 An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy that lets **Claude Code** (and other Anthropic clients) talk to non-Anthropic LLMs through clean, explicit translations.
 
+> **Agentic development guide:** See [`CLAUDE.md`](CLAUDE.md) (also symlinked as [`AGENTS.md`](AGENTS.md)) for conventions on testing integrity, development cadence, backend capability audits, and common pitfalls when working with this codebase.
+
 ## Why I Built This
 
 I wanted to use other models (DeepSeek, Kimi, etc.) with Claude Code without fighting LiteLLM every step of the way. With LiteLLM I kept running into:
