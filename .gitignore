@@ -12,7 +12,8 @@ build/
 .ruff_cache/
 *.log
 .DS_Store
-logs/debug/
+logs/
 .coverage
+.tags
 docs/api-schemas/kimi-cli-kosong-provider.py
 uv.lock
