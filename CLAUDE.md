@@ -42,15 +42,17 @@ The debug logger (`src/seven_bridges/debug.py`) is the primary diagnostic tool f
 
 ```bash
 # Full suite (what pre-commit runs)
-make check        # lint + test
+make check        # lint + unit tests
 
 # With coverage report
 make test-cov
 
 # Granular suites
-make test-unit    # translation + streaming
-make test-e2e     # mocked upstream HTTP round-trips
-make test-smoke   # API basics
+make test-unit     # translation + streaming (61 tests)
+make test-e2e      # mocked upstream HTTP round-trips
+make test-smoke    # API basics
+make test-agent    # agent inference tests against live upstreams (14 tests)
+make test-smoke-streaming  # live streaming smoke tests against all 3 models
 ```
 
 ### Coverage Gate
@@ -74,7 +76,7 @@ Rules are strict (`mypy --strict`, `ruff` with `UP` and `B` rules). Type ignores
 2. **ruff check** — lint must pass
 3. **ruff format** — auto-format
 4. **mypy** — strict type checking
-5. **pytest** — all 58 tests, 80% coverage gate
+5. **pytest** — all 61 unit tests + 14 agent inference tests, 80% coverage gate
 
 If any step fails, the commit is rejected. Fix and retry.
 

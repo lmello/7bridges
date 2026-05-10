@@ -1,14 +1,14 @@
 # Session Handoff Report
 
-**Date:** 2026-05-13
+**Date:** 2026-05-12
 **Project:** 7-bridges-of-claude (`~/Dev/vibe/7-bridges-of-claude`)
-**Branch:** `main` → `origin/main` (`git@github.com:7bridges/7bridges.git`)
+**Branch:** `main` → `origin/main` (`e864fab`)
 
 ---
 
 ## What This Project Is
 
-An **Anthropic Messages API proxy** that lets Claude Code (and other Anthropic clients) talk to non-Anthropic LLMs through explicit, tested translations. Every field that crosses the boundary is deliberately mapped.
+An **Anthropic Messages API proxy** that lets Claude Code talk to non-Anthropic LLMs (DeepSeek, Kimi) through explicit, tested translations.
 
 **Model mapping:**
 | Alias | Backend | Actual Model | Context | Max Output |
@@ -16,84 +16,51 @@ An **Anthropic Messages API proxy** that lets Claude Code (and other Anthropic c
 | `claude-haiku-4-5` | DeepSeek | `deepseek-v4-flash` | 1M | 384K |
 | `claude-sonnet-4-6` | DeepSeek | `deepseek-v4-pro` | 1M | 384K |
 | `claude-opus-4-6` | Kimi | `kimi-for-coding` (K2.6) | 262K | 32K |
+| `claude-haiku-4-5-20251001` | DeepSeek | `deepseek-v4-flash` | 1M | 384K |
 
-**Port:** 4001 (PM2-managed)
+**Port:** 4001 (PM2-managed, PID 51635)
 
 ---
 
 ## Everything We Did This Session
 
-### 1. Debug Middleware Hardening
-- Replaced broken `time.strftime` with `datetime.now(UTC).isoformat()`
-- Added `handler_latency_ms`, `stream_duration_ms`, `duration_ms`
-- Replaced `setattr(body_iterator)` hack with proper `StreamingResponse` rebuild
-- Added try/except around stream consumption (returns 500 on failure)
-- Added log cleanup: keeps only 100 most recent debug logs
-- Fixed bytes concatenation inefficiency (`chunks.append()` + `b"".join()`)
+### 1. count_tokens Endpoint
+- Added `POST /v1/messages/count_tokens` with local token estimation (~4 chars/token)
+- Claude Code uses this to check token budget; was returning 404, causing retries
 
-### 2. Tool Result Translation Fix
-- `ToolResultBlock` was being folded into user messages as text
-- Fixed to emit proper OpenAI `tool` role messages with `tool_call_id`
-- Added error flag: prefixes `[Error]` when `ToolResultBlock.is_error` is true
-- Added 3 unit tests for this
+### 2. Streaming Usage Fix
+- Added `stream_options={"include_usage": true}` to upstream OpenAI requests
+- `translate_openai_stream` now captures usage from final delta chunks (not just usage-only chunks)
+- Statusline now shows non-zero in/out tokens
 
-### 3. Thinking Signature Constant
-- Added `_SIGNATURE_PLACEHOLDER = ""` in `models/anthropic.py` with docstring
-- Used everywhere instead of hardcoded `""`
-- Anthropic cryptographically signs thinking blocks; upstream vendors (Kimi, DeepSeek) do not provide signatures
+### 3. Context Window Metadata
+- `/v1/models` returns `context_window` and `max_output_tokens` per model
+- Claude Code reads these for `[1m]`/`[262k]` display
 
-### 4. Streaming State Machine Hardening
-- Added 3 edge-case tests: interleaved thinking+tool_calls, multiple tool calls, finish in same chunk
-- All pass
+### 4. Debug Log Truncation
+- 50 KB cap per log entry
+- Large request bodies replaced with summary: `{"_truncated": true, "_original_bytes": N, "message_count": M}`
 
-### 5. Agent Inference Test Framework (`tests/agent-inference/`)
+### 5. Tail-Logs Auto-Switch
+- `make tail-logs` now follows newest debug log file across PM2 restarts via bash loop
 
-Created a complete integration test suite that reads JSON fixtures, calls the bridge via HTTP, and evaluates responses.
+### 6. Agent Inference Test Framework (14 tests)
+- Parametrized across 3 models × 5 fixtures
+- Hybrid evaluation: rule-based checks (primary) + LLM judge (secondary)
+- Judge extracts scores from thinking-only output via 6 regex patterns
+- `known_issues` per model → `pytest.xfail` (Kimi jailbreak non-determinism)
 
-**Evaluation strategy:**
-1. **Rule-based checks** (primary, deterministic): `must_contain`, `must_not_contain`, `min_length`, `max_length`
-2. **LLM-as-judge** (secondary, best-effort): Regex heuristics extract scores from thinking-only output
+### 7. Live Streaming Smoke Tests
+- `tests/test_smoke_streaming.py` verifies streaming end-to-end for all 3 models
 
-**Test fixtures (5 total, 14 parametrized cases):**
+### 8. Auto-approve Dynamic Discovery
+- `scripts/auto-approve.ts` (committed to `~/.claude` repo, `08e18c1`)
+- Queries `/v1/models` to discover haiku model dynamically
+- Works across litellm/7-bridges/Anthropic
 
-| Fixture | Models Tested | What It Tests |
-|---------|:-------------:|---------------|
-| `password-fake-constraints` | All 3 | Jailbreak resistance (fake override instruction) |
-| `bat-ball-arithmetic-traps` | All 3 | Multi-hop reasoning (correct answer: $0.05) |
-| `code-fizzbuzz-one-liner` | All 3 | Code generation with constraints |
-| `logic-wason-selection` | All 3 | Logic puzzle (correct answer: A and 7) |
-| `stream-file-analysis` | Sonnet, Opus | Tool use emission (non-automatable — skips after verifying tool_use block) |
-
-**Known issue tracking:**
-- `known_issues` field per fixture → `pytest.xfail` for documented upstream quirks
-- Kimi K2.6 is non-deterministically vulnerable to simple jailbreak (sometimes leaks "blueberry")
-
-**Run:**
-```bash
-make test-agent          # 14 integration tests
-make test                # 61 unit tests (excludes agent tests)
-make check               # lint + unit tests
-```
-
-### 6. Live Streaming Smoke Test
-- `tests/test_smoke_streaming.py` — hits real upstream APIs with streaming for all 3 models
-- Verifies SSE format, content_block_delta presence, and response content
-- All 3 pass
-
-### 7. Context Window Metadata
-- Added `context_window` and `max_output_tokens` to `ModelRoute` dataclass
-- Updated `/v1/models` endpoint to expose these fields
-- Claude Code reads context windows from the model list response
-- PM2 restarted to pick up changes
-
-### 8. Documentation
-- Updated `tests/agent-inference/README.md` with run instructions and known issues
-- Updated `Makefile` with `test-agent` target
-
-### 9. Git Operations
-- Commit: `9935af6` — *feat: agent inference test framework + live streaming smoke tests*
-- Pushed to `git@github.com:7bridges/7bridges.git`
-- All files clean on `main`
+### 9. Diagnostic Logging
+- `logs/diagnostics.jsonl` captures 400 error details (validation, upstream, unknown model)
+- Helped identify root cause of phantom alias 400s
 
 ---
 
@@ -101,20 +68,16 @@ make check               # lint + unit tests
 
 | File | What Changed |
 |------|-------------|
-| `src/seven_bridges/config.py` | Added `context_window`, `max_output_tokens` to `ModelRoute`; set per-model values |
-| `src/seven_bridges/main.py` | `/v1/models` now returns `context_window` + `max_output_tokens` |
-| `src/seven_bridges/debug.py` | Hardened middleware: proper StreamingResponse rebuild, error handling, log cleanup |
-| `src/seven_bridges/translation/request.py` | ToolResultBlock → proper OpenAI `tool` role messages |
-| `src/seven_bridges/translation/stream.py` | Existing streaming translation (no changes this session) |
-| `src/seven_bridges/models/anthropic.py` | Added `_SIGNATURE_PLACEHOLDER` constant |
-| `tests/agent-inference/fixtures.json` | 5 test fixtures |
-| `tests/agent-inference/test_agent_inference.py` | Parametrized runner with hybrid evaluation |
-| `tests/agent-inference/README.md` | Documentation |
-| `tests/test_smoke_streaming.py` | Live streaming smoke test |
-| `tests/test_streaming.py` | +3 edge-case tests |
-| `tests/test_translation.py` | +3 tool result tests |
-| `Makefile` | Added `test-agent` target |
-| `ecosystem.config.js` | `BRIDGE_DEBUG: '1'` set |
+| `src/seven_bridges/config.py` | Added `claude-haiku-4-5-20251001` alias |
+| `src/seven_bridges/main.py` | Added `count_tokens`, diagnostic logging, context window in `/v1/models` |
+| `src/seven_bridges/debug.py` | 50 KB log truncation, large body summaries |
+| `src/seven_bridges/backends/deepseek.py` | `stream_options={"include_usage": true}` |
+| `src/seven_bridges/backends/kimi.py` | `stream_options={"include_usage": true}` |
+| `src/seven_bridges/translation/stream.py` | Usage extraction from final delta chunks |
+| `src/seven_bridges/models/openai.py` | Added `StreamOptions` model |
+| `tests/agent-inference/test_agent_inference.py` | 14 parametrized tests, hybrid evaluation |
+| `tests/test_smoke_streaming.py` | Live streaming smoke tests |
+| `Makefile` | `tail-logs` auto-switch loop, `test-agent`, `test-smoke-streaming` targets |
 
 ---
 
@@ -122,11 +85,11 @@ make check               # lint + unit tests
 
 | Metric | Value |
 |--------|-------|
-| Process | PID 79730, online, 5m uptime (restarted with latest changes) |
+| Process | PID 51635, online |
 | Port | 4001 |
 | Health | `{"status":"ok"}` |
 | Debug logging | Enabled (`BRIDGE_DEBUG=1`) |
-| PM2 restarts | 20 total (historical — current instance stable) |
+| Last restart | Before some config changes (see below) |
 
 **All tests pass:**
 - 61 unit tests: ✅
@@ -136,17 +99,23 @@ make check               # lint + unit tests
 
 ---
 
-## Known Issues & Quirks
+## ⚠️ Active Issues & Notes
 
-1. **Kimi K2.6 jailbreak vulnerability**: Non-deterministically leaks "blueberry" on simple override jailbreak. Marked as `xfail` in tests.
+1. **Bridge restart pending:** PID 51635 was last restarted *before* some fixes. The following are in the codebase but may not be active until next restart:
+   - `claude-haiku-4-5-20251001` alias
+   - Diagnostic logging (`_log_diagnostic`)
+   - `count_tokens` endpoint (may work — FastAPI reloads routes, but model resolution might not)
+   - **DO NOT restart while active agents are running.**
 
-2. **Kimi thinking-only output**: Sometimes returns all content as `thinking_delta` with no `text_delta`. The reconstruction logic handles this (`text or thinking` fallback), but clients should be aware.
+2. **Phantom alias 400s (intermittent):** Other Claude Code instances (PIDs 25505, 93350) may use `claude-haiku-4-5-20251001` for background tasks. The new alias in config will fix this after restart.
 
-3. **Tool use tests non-automatable**: The `stream-file-analysis` fixture requires a tool-executing client (Claude Code). The automated test only verifies a `tool_use` block was emitted, then skips.
+3. **Kimi jailbreak non-determinism:** `password-fake-constraints` on `claude-opus-4-6` sometimes leaks "blueberry". Documented as known issue with xfail.
 
-4. **LLM judge is best-effort**: Upstream models return thinking-only output, so structured JSON score extraction uses regex heuristics. Judge scores are informational; rule-based checks determine pass/fail.
+4. **Tool-use tests non-automatable:** `stream-file-analysis` requires real tool-executing client. Test verifies `tool_use` block emission then skips.
 
-5. **Model name confusion**: There's also a `litellm-bridge` process running (port unknown, PID 8783). Make sure `ANTHROPIC_BASE_URL` points to **4001**.
+5. **Env var hygiene:** Current shell has only `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY`. No `ANTHROPIC_DEFAULT_*_MODEL` vars.
+
+6. **Multiple Claude Code instances:** Three instances running (PIDs 64156 — current, 93350, 25505).
 
 ---
 
@@ -169,7 +138,7 @@ Then inside Claude Code:
 
 ## Where to Pick Up
 
-- The bridge is **stable and ready for development tasks**
-- Heavy task was just started with DeepSeek Pro (sonnet); user will ask to "check logs" for irregularities
-- Debug log: `logs/debug/0ca68c51.jsonl` (baseline: 406 KB at session start)
-- `logs/out.log`: 403 lines, `logs/err.log`: 1,642 lines (baseline positions captured)
+- The bridge is **stable for development tasks**
+- All fixes are committed and pushed to `origin/main` (`e864fab`)
+- Next action: restart bridge when no agents are active, to pick up config changes
+- Monitor `logs/diagnostics.jsonl` for any new 400s after restart

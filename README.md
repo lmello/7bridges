@@ -50,6 +50,15 @@ Each backend is a "bridge":
 | DeepSeek | `api.deepseek.com` | `deepseek-v4-pro` (Sonnet), `deepseek-v4-flash` (Haiku) | ❌ | ✅ | ✅ | Live |
 | Kimi | `api.kimi.com/coding/v1` | `kimi-for-coding` (K2.6) | ✅ | ✅ | ✅ | Live |
 
+### Model Aliases
+
+| Alias | Backend | Model | Context | Max Output |
+|---|---|---|---|---|
+| `claude-sonnet-4-6` | DeepSeek | `deepseek-v4-pro` | 1,048,576 | 393,216 |
+| `claude-haiku-4-5` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
+| `claude-opus-4-6` | Kimi | `kimi-for-coding` | 262,144 | 32,768 |
+| `claude-haiku-4-5-20251001` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
+
 ## Setup
 
 ```sh
@@ -121,6 +130,18 @@ curl -N -X POST http://localhost:4001/v1/messages \
   }'
 ```
 
+Count tokens (local estimation):
+
+```sh
+curl -X POST http://localhost:4001/v1/messages/count_tokens \
+  -H "x-api-key: ollama" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-opus-4-6",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
 ## Project Structure
 
 ```
@@ -141,11 +162,16 @@ curl -N -X POST http://localhost:4001/v1/messages \
 │       ├── response.py      # OpenAI → Anthropic response translation
 │       └── stream.py        # OpenAI SSE → Anthropic SSE streaming
 ├── tests/
-│   ├── test_translation.py  # Unit tests for request/response conversion
-│   ├── test_streaming.py    # Unit tests for SSE event generation
-│   ├── test_e2e.py          # E2E tests with mocked upstreams
-│   ├── test_smoke.py        # Smoke tests for API basics
-│   └── test_debug.py        # Debug middleware tests
+│   ├── test_translation.py      # Unit tests for request/response conversion
+│   ├── test_streaming.py        # Unit tests for SSE event generation
+│   ├── test_e2e.py              # E2E tests with mocked upstreams
+│   ├── test_smoke.py            # Smoke tests for API basics
+│   ├── test_smoke_streaming.py  # Live streaming smoke tests (hits real APIs)
+│   ├── test_debug.py            # Debug middleware tests
+│   └── agent-inference/         # Integration tests against live upstreams
+│       ├── fixtures.json        # 5 test scenarios with evaluation criteria
+│       ├── test_agent_inference.py  # Parametrized: 3 models × 5 fixtures
+│       └── README.md            # How the evaluation framework works
 ├── docs/api-schemas/        # Reference OpenAPI specs
 ├── Makefile                 # Test, lint, format targets
 └── ecosystem.config.js      # PM2 process config
@@ -170,6 +196,8 @@ Each JSONL file contains:
 | `request` | Method, path, headers, parsed request body |
 | `stream_body` | Full raw SSE text (for streaming responses) |
 | `response` | Status code, duration, headers, body (or `<streaming_response: N bytes>`) |
+
+**Log truncation:** Large request bodies (over 50 KB) are summarized instead of logged verbatim. Stream bodies are also capped. This prevents multi-megabyte debug logs when sending large files.
 
 Example — read the last 10 entries of the most recent log:
 
