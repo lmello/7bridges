@@ -3,6 +3,7 @@
 import json
 import os
 import time
+import traceback
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -15,10 +16,21 @@ from starlette.responses import Response, StreamingResponse
 
 DEBUG_DIR = Path(__file__).parent.parent.parent / "logs" / "debug"
 DEBUG_ENABLED = os.environ.get("BRIDGE_DEBUG", "").lower() in ("1", "true", "yes")
+_MAX_DEBUG_FILES = 100
 
 
 def _ensure_debug_dir() -> None:
     DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _cleanup_old_logs(max_files: int = _MAX_DEBUG_FILES) -> None:
+    """Keep only the N most recent debug log files to prevent unbounded growth."""
+    try:
+        files = sorted(DEBUG_DIR.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old_file in files[max_files:]:
+            old_file.unlink(missing_ok=True)
+    except OSError:
+        pass  # Best-effort cleanup
 
 
 class DebugMiddleware(BaseHTTPMiddleware):
@@ -34,6 +46,7 @@ class DebugMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         _ensure_debug_dir()
+        _cleanup_old_logs()
         session_id = str(uuid.uuid4())[:8]
         started_at = time.time()
 
@@ -77,7 +90,7 @@ class DebugMiddleware(BaseHTTPMiddleware):
         # Capture response body
         resp_body: object = None
         if self._is_streaming_response(response):
-            resp_body = await self._capture_streaming_response(
+            resp_body, response = await self._capture_streaming_response(
                 response, log_path, started_at, handler_done_at
             )
         else:
@@ -116,23 +129,52 @@ class DebugMiddleware(BaseHTTPMiddleware):
         log_path: Path,
         started_at: float,
         handler_done_at: float,
-    ) -> str:
+    ) -> tuple[str, Response]:
         """Consume a StreamingResponse, log the full text, and rebuild it.
 
-        Returns the captured body text for the response entry.
+        Returns (captured_body_text, rebuilt_response).
         """
         stream_start_at = time.time()
         chunks: list[bytes] = []
         body_iter = getattr(response, "body_iterator", None)
-        if body_iter is not None:
-            async for raw in body_iter:
-                if isinstance(raw, bytes):
-                    chunks.append(raw)
-                elif isinstance(raw, str):
-                    chunks.append(raw.encode("utf-8"))
-                else:
-                    # memoryview or other buffer protocol
-                    chunks.append(bytes(raw))
+
+        try:
+            if body_iter is not None:
+                async for raw in body_iter:
+                    if isinstance(raw, bytes):
+                        chunks.append(raw)
+                    elif isinstance(raw, str):
+                        chunks.append(raw.encode("utf-8"))
+                    else:
+                        # memoryview or other buffer protocol
+                        chunks.append(bytes(raw))
+        except Exception as exc:
+            # Log the error so it's not silent, then return a graceful 500
+            error_entry = {
+                "type": "stream_error",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            }
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(error_entry, ensure_ascii=False, default=str) + "\n")
+
+            return (
+                f"<stream_error: {exc}>",
+                Response(
+                    content=json.dumps(
+                        {
+                            "type": "error",
+                            "error": {
+                                "type": "internal_error",
+                                "message": "Stream capture failed",
+                            },
+                        }
+                    ),
+                    status_code=500,
+                    media_type="application/json",
+                ),
+            )
 
         stream_end_at = time.time()
         body_bytes = b"".join(chunks)
@@ -155,19 +197,26 @@ class DebugMiddleware(BaseHTTPMiddleware):
             for chunk in chunks:
                 yield chunk
 
-        setattr(response, "body_iterator", _replay())  # noqa: B010  # type: ignore[arg-defined]
-        return f"<streaming_response: {len(body_bytes)} bytes>"
+        rebuilt = StreamingResponse(
+            content=_replay(),
+            status_code=response.status_code,
+            headers=dict(response.headers.items()),
+            media_type=response.media_type,
+        )
+        return f"<streaming_response: {len(body_bytes)} bytes>", rebuilt
 
     async def _capture_response_body(self, response: Response) -> tuple[object, Response]:
         """Capture the body of a non-streaming response.
 
         Returns (parsed_body, rebuilt_response).
         """
-        body_bytes = b""
+        chunks: list[bytes] = []
         body_iter = getattr(response, "body_iterator", None)
         if body_iter is not None:
             async for chunk in body_iter:
-                body_bytes += chunk
+                chunks.append(chunk)
+
+        body_bytes = b"".join(chunks)
 
         # Rebuild response so client still gets it
         rebuilt = Response(
