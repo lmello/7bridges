@@ -51,6 +51,9 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests
+        env:
+          DEEPSEEK_API_KEY: dummy
+          KIMI_CODE_API_KEY: dummy
         run: pytest tests/ -v --cov=src/seven_bridges --cov-fail-under=80 --ignore=tests/agent-inference --ignore=tests/test_smoke_streaming.py
 
       - name: Configure Git
