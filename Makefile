@@ -14,16 +14,16 @@ start:
 	pm2 start ecosystem.config.js
 
 stop:
-	pm2 delete 7-bridges-of-claude
+	pm2 delete 7bridges
 
 restart:
-	pm2 restart 7-bridges-of-claude
+	pm2 restart 7bridges
 
 flush:
 	rm -f logs/out.log logs/err.log
 
 logs:
-	pm2 logs 7-bridges-of-claude
+	pm2 logs 7bridges
 
 run-debug:
 	BRIDGE_DEBUG=1 .venv/bin/python -m uvicorn seven_bridges.main:app --host 0.0.0.0 --port 4001

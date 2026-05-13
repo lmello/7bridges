@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name: '7-bridges-of-claude',
+    name: '7bridges',
     cwd: __dirname,
     script: '.venv/bin/python',
     args: '-m uvicorn seven_bridges.main:app --host 0.0.0.0 --port 4001',
