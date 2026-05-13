@@ -1,7 +1,8 @@
 """Configuration and model routing."""
 
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,18 @@ class ModelRoute:
     display_name: str
     context_window: int = 200_000
     max_output_tokens: int = 8192
+
+
+def _version_display(suffix: str) -> str:
+    """Convert a version suffix like '4-6' or '4-5-20251001' to display form.
+
+    >>> _version_display('4-6')
+    '4.6'
+    >>> _version_display('4-5-20251001')
+    '4.5-20251001'
+    """
+    parts = suffix.split("-", 1)
+    return parts[0] + "." + parts[1] if len(parts) == 2 else parts[0]
 
 
 class Settings:
@@ -68,6 +81,38 @@ class Settings:
             max_output_tokens=393_216,
         ),
     }
+
+    # When Claude Code updates and introduces brand-new model aliases (e.g.
+    # claude-opus-4-8) we route them automatically via prefix matching
+    # instead of requiring a manual config entry every time.
+    _fallback_patterns: list[tuple[re.Pattern[str], str]] = [
+        (re.compile(r"^claude-opus-4-"), "claude-opus-4-6"),
+        (re.compile(r"^claude-sonnet-4-"), "claude-sonnet-4-6"),
+        (re.compile(r"^claude-haiku-4-"), "claude-haiku-4-5"),
+    ]
+
+    def resolve_model(self, alias: str) -> ModelRoute | None:
+        """Look up a model route by exact match, then by pattern fallback."""
+        if alias in self.model_routes:
+            return self.model_routes[alias]
+
+        for pattern, canonical in self._fallback_patterns:
+            if not pattern.match(alias):
+                continue
+            if canonical not in self.model_routes:
+                continue
+            route = self.model_routes[canonical]
+            # Derive a display name with the correct version string.
+            # e.g. canonical "claude-opus-4-6" -> suffix "4-6" -> display "4.6"
+            #      alias    "claude-opus-4-7" -> suffix "4-7" -> display "4.7"
+            canonical_suffix = canonical.split("-", 2)[2]
+            alias_suffix = alias.split("-", 2)[2]
+            new_display = route.display_name.replace(
+                _version_display(canonical_suffix),
+                _version_display(alias_suffix),
+            )
+            return replace(route, alias=alias, display_name=new_display)
+        return None
 
     # Bedrock-style variants map to the same routes
     _aliases = list(model_routes.keys())

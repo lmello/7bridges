@@ -139,7 +139,7 @@ async def messages(
         _log_diagnostic("validation_error", body, {"error": str(exc)})
         raise
 
-    route = settings.model_routes.get(anthropic_request.model)
+    route = settings.resolve_model(anthropic_request.model)
     if route is None:
         _log_diagnostic("unknown_model", body, {"model": anthropic_request.model})
         return JSONResponse(
