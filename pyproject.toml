@@ -34,7 +34,9 @@ version_toml = ["pyproject.toml:project.version"]
 branch = "main"
 changelog_file = "CHANGELOG.md"
 build_command = "echo 'no build needed'"
-commit_version_number = true
+
+[tool.semantic_release.commit]
+message = "chore(release): {version} [skip ci]"
 
 [tool.mypy]
 python_version = "3.13"
