@@ -75,6 +75,16 @@ export KIMI_CODE_API_KEY="sk-..."
 export BRIDGE_API_KEY="ollama"  # or whatever you want Claude Code to send
 ```
 
+**Auto-loading with direnv** (optional):
+
+```sh
+cp .envrc.example .envrc
+# edit .envrc and fill in your API keys
+direnv allow
+```
+
+This automatically exports the env vars and adds `.venv/bin` to `PATH` whenever you `cd` into the project.
+
 Run via PM2 (production) or directly (development):
 
 ```sh
