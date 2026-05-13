@@ -75,3 +75,9 @@ format:
 	.venv/bin/ruff format src/ tests/
 
 check: lint test
+
+version:
+	.venv/bin/semantic-release version
+
+changelog:
+	.venv/bin/semantic-release changelog

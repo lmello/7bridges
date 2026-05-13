@@ -1,6 +1,6 @@
 [project]
 name = "seven-bridges-of-claude"
-version = "0.1.0"
+version = "1.0.0"
 description = "Anthropic Messages API proxy for multiple LLM backends"
 requires-python = ">=3.13"
 dependencies = [
@@ -19,6 +19,7 @@ dev = [
     "ruff>=0.9.0",
     "mypy>=1.14.0",
     "pre-commit>=4.0.0",
+    "python-semantic-release>=9.0.0",
 ]
 
 [tool.ruff]
@@ -27,6 +28,13 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+changelog_file = "CHANGELOG.md"
+build_command = "echo 'no build needed'"
+commit_version_number = true
 
 [tool.mypy]
 python_version = "3.13"
