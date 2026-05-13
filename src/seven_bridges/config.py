@@ -48,6 +48,14 @@ class Settings:
             context_window=262_144,
             max_output_tokens=32_768,
         ),
+        "claude-opus-4-7": ModelRoute(
+            alias="claude-opus-4-7",
+            bridge="kimi",
+            backend_model="kimi-for-coding",
+            display_name="Claude Opus 4.7 (Kimi K2.6)",
+            context_window=262_144,
+            max_output_tokens=32_768,
+        ),
         # Claude Code internal fallback aliases (used for background tasks
         # like session title generation when ANTHROPIC_DEFAULT_HAIKU_MODEL
         # is set in another shell)
