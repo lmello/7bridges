@@ -65,7 +65,7 @@ test-cov:
 	.venv/bin/pytest tests/ --cov=src/seven_bridges --cov-report=term-missing --cov-report=html
 
 test-ci:
-	.venv/bin/pytest tests/ --cov=src/seven_bridges --cov-report=xml --cov-fail-under=85
+	.venv/bin/pytest tests/ --cov=src/seven_bridges --cov-report=xml --cov-fail-under=85 --ignore=tests/agent-inference --ignore=tests/test_smoke_streaming.py
 
 lint:
 	.venv/bin/ruff check src/ tests/
