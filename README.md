@@ -50,6 +50,8 @@ Each backend is a "bridge":
 | DeepSeek | `api.deepseek.com` | `deepseek-v4-pro` (Sonnet), `deepseek-v4-flash` (Haiku) | ❌ | ✅ | ✅ | Live |
 | Kimi | `api.kimi.com/coding/v1` | `kimi-for-coding` (K2.6) | ✅ | ✅ | ✅ | Live |
 
+> **Note on vision/image support:** DeepSeek v4 does not support the `image_in` tool yet. For debugging, development, or any image-related tasks, use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) — it maps to Kimi K2.6 which has full vision capabilities.
+
 ### Model Aliases
 
 | Alias | Backend | Model | Context | Max Output |
