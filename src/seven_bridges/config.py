@@ -89,6 +89,9 @@ class Settings:
         (re.compile(r"^claude-opus-4-"), "claude-opus-4-6"),
         (re.compile(r"^claude-sonnet-4-"), "claude-sonnet-4-6"),
         (re.compile(r"^claude-haiku-4-"), "claude-haiku-4-5"),
+        # Claude 3.5-era models (e.g. claude-3-5-haiku-20241022 used by
+        # Claude Code statusline). Route to haiku — these are tiny requests.
+        (re.compile(r"^claude-3-5-"), "claude-haiku-4-5"),
     ]
 
     def resolve_model(self, alias: str) -> ModelRoute | None:
