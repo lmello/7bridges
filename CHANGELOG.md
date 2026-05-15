@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.0.1 (2026-05-15)
+
+### Bug Fixes
+
+- **config**: Add Claude 3.5-era fallback pattern for statusline model
+  ([`2d881b1`](https://github.com/sdkks/7bridges/commit/2d881b1ada955ae55d212d95ef94ceb34f591e34))
+
+### Documentation
+
+- **readme**: Add vision support note for DeepSeek vs Kimi
+  ([`cb7cd88`](https://github.com/sdkks/7bridges/commit/cb7cd88d5e595c17947737ce938b7717dbb750f3))
+
+
 ## v1.0.0 (2026-05-13)
 
 - Initial Release
