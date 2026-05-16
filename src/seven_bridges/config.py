@@ -41,7 +41,7 @@ class Settings:
     )
     ollama_sonnet_ctx: int = int(os.environ.get("OLLAMA_SONNET_CONTEXT_WINDOW", "32768"))
     ollama_haiku_model: str = os.environ.get(
-        "OLLAMA_HAIKU_MODEL", "qwen2.5-coder:7b-instruct-q4_K_M"
+        "OLLAMA_HAIKU_MODEL", "qwen3.5:9b"
     )
     ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "65536"))
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
