@@ -1,6 +1,6 @@
 # Ollama Known Working Models
 
-Models tested and confirmed working with the 7 Bridges Ollama backend. All models support tool calling (Read, Write, Edit, Bash) and run locally on Apple Silicon M2 Pro with 32 GB unified memory. Capabilities determined via `ollama show <model>`.
+Models tested and confirmed working with the 7 Bridges Ollama backend. Each model was evaluated on a BFS binary tree inversion task — writing a Python script with a queue-based approach to `/tmp/bfs.py` — to verify reasoning, coding, and tool-use (Read/Write/Edit) end-to-end. All models run locally on Apple Silicon M2 Pro with 32 GB unified memory. Capabilities determined via `ollama show <model>`.
 
 | Alias | Model | Params | Activated | Type | Architecture | Quant | Native Context | Vision | Tools | Thinking |
 |---|---|---|---|---|---|---|---|---|---|---|---|
