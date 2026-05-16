@@ -3,8 +3,8 @@ export KIMI_CODE_API_KEY=
 export OLLAMA_HOST=http://127.0.0.1:11434
 export OLLAMA_SONNET_MODEL=qwen3.6:35b-a3b-coding-nvfp4
 export OLLAMA_SONNET_CONTEXT_WINDOW=32768
-export OLLAMA_HAIKU_MODEL=qwen3.6:35b-a3b-coding-nvfp4
-export OLLAMA_HAIKU_CONTEXT_WINDOW=32768
+export OLLAMA_HAIKU_MODEL=qwen2.5-coder:7b-instruct-q4_K_M
+export OLLAMA_HAIKU_CONTEXT_WINDOW=65536
 export OLLAMA_KEEP_ALIVE=300s
 export BRIDGE_API_KEY=ollama
 PATH_add .venv/bin

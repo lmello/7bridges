@@ -1,8 +1,11 @@
 """Ollama bridge — translates Anthropic Messages API to Ollama's native chat API."""
 
 import json
+import sys
+import traceback
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from ollama import AsyncClient, ChatResponse, Message, Tool
@@ -17,6 +20,17 @@ from seven_bridges.models.anthropic import (
     ToolUseBlock,
     Usage,
 )
+
+
+def _log_stderr(level: str, message: str, **details: Any) -> None:
+    entry = {
+        "ts": datetime.now(UTC).isoformat(),
+        "level": level,
+        "bridge": "ollama",
+        "msg": message,
+        **details,
+    }
+    print(json.dumps(entry, ensure_ascii=False, default=str), file=sys.stderr)
 
 
 def _map_done_reason(done_reason: str | None) -> str | None:
@@ -69,7 +83,6 @@ def _anthropic_messages_to_ollama(
                         data = source.get("data", "")
                         images.append(f"data:{media_type};base64,{data}")
                 elif hasattr(block, "tool_use_id") and block.type == "tool_result":
-                    # Tool result
                     tc = block.content
                     if isinstance(tc, list):
                         result_text = "\n".join(
@@ -90,7 +103,7 @@ def _anthropic_messages_to_ollama(
                         }
                     )
                 elif hasattr(block, "thinking") and block.type == "thinking":
-                    pass  # Thinking blocks not needed in request
+                    pass
 
             if msg.role == "assistant" and tool_calls:
                 messages.append(
@@ -134,17 +147,14 @@ def _ollama_chat_to_anthropic(
     msg = response.message
     content: list[Any] = []
 
-    # Reasoning/thinking content
     if msg.thinking:
         content.append(
             ThinkingBlock(thinking=msg.thinking, signature=_SIGNATURE_PLACEHOLDER)
         )
 
-    # Text content
     if msg.content:
         content.append(TextBlock(text=msg.content))
 
-    # Tool calls
     if msg.tool_calls:
         for tc in msg.tool_calls:
             args = tc.function.arguments
@@ -180,10 +190,7 @@ def _ollama_chat_to_anthropic(
 def _ollama_chunk_to_openai_chunk(
     chunk: ChatResponse, chunk_id: str
 ) -> dict[str, Any]:
-    """Convert a streaming Ollama ChatResponse chunk to an OpenAI-format chunk.
-
-    This lets us reuse the existing translate_openai_stream pipeline.
-    """
+    """Convert a streaming Ollama ChatResponse chunk to an OpenAI-format chunk."""
     oai_chunk: dict[str, Any] = {
         "id": chunk_id,
         "object": "chat.completion.chunk",
@@ -207,7 +214,6 @@ def _ollama_chunk_to_openai_chunk(
     if msg.content:
         delta["content"] = msg.content
 
-    # Ollama sends complete tool_calls when done; convert to OpenAI streaming format
     if msg.tool_calls:
         tool_calls = []
         for i, tc in enumerate(msg.tool_calls):
@@ -267,12 +273,7 @@ class OllamaBridge(Bridge):
         self.keep_alive = keep_alive
         self._client = AsyncClient(host=self.api_base)
 
-    async def chat(self, request: MessagesRequest) -> MessagesResponse:
-        messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
-
-        if system_prompt:
-            messages.insert(0, Message(role="system", content=system_prompt))
-
+    def _build_options(self, request: MessagesRequest) -> dict[str, Any]:
         options: dict[str, Any] = {}
         if request.max_tokens:
             options["num_predict"] = request.max_tokens
@@ -284,6 +285,37 @@ class OllamaBridge(Bridge):
             options["top_k"] = request.top_k
         if request.stop_sequences:
             options["stop"] = list(request.stop_sequences)
+        return options
+
+    async def chat(self, request: MessagesRequest) -> MessagesResponse:
+        try:
+            messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
+        except Exception:
+            _log_stderr(
+                "error", "request translation failed",
+                model_alias=self.model_alias,
+                trace=traceback.format_exc(),
+            )
+            raise BridgeError(
+                message="Failed to translate request for Ollama",
+                status_code=502,
+                error_type="api_error",
+            )
+
+        if system_prompt:
+            messages.insert(0, Message(role="system", content=system_prompt))
+
+        options = self._build_options(request)
+
+        _log_stderr(
+            "info", "ollama request",
+            model_alias=self.model_alias,
+            backend_model=self.backend_model,
+            msg_count=len(messages),
+            tool_count=len(tools) if tools else 0,
+            streaming=False,
+            keep_alive=str(self.keep_alive),
+        )
 
         try:
             response: ChatResponse = await self._client.chat(
@@ -295,54 +327,120 @@ class OllamaBridge(Bridge):
                 stream=False,
             )
         except Exception as e:
+            _log_stderr(
+                "error", "ollama SDK call failed",
+                model_alias=self.model_alias,
+                backend_model=self.backend_model,
+                error=str(e),
+                trace=traceback.format_exc(),
+            )
             raise BridgeError(
                 message=str(e),
                 status_code=502,
                 error_type="api_error",
             ) from e
 
-        return _ollama_chat_to_anthropic(response, self.model_alias)
+        try:
+            result = _ollama_chat_to_anthropic(response, self.model_alias)
+        except Exception:
+            _log_stderr(
+                "error", "response translation failed",
+                model_alias=self.model_alias,
+                response_preview=str(response)[:1000],
+                trace=traceback.format_exc(),
+            )
+            raise BridgeError(
+                message="Failed to translate Ollama response",
+                status_code=502,
+                error_type="api_error",
+            )
+
+        _log_stderr(
+            "info", "ollama response OK",
+            model_alias=self.model_alias,
+            content_blocks=len(result.content),
+            stop_reason=result.stop_reason,
+            input_tokens=result.usage.input_tokens,
+            output_tokens=result.usage.output_tokens,
+        )
+        return result
 
     async def chat_stream(
         self, request: MessagesRequest
     ) -> AsyncIterator[dict[str, Any]]:
-        messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
+        try:
+            messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
+        except Exception:
+            _log_stderr(
+                "error", "stream request translation failed",
+                model_alias=self.model_alias,
+                trace=traceback.format_exc(),
+            )
+            raise BridgeError(
+                message="Failed to translate stream request for Ollama",
+                status_code=502,
+                error_type="api_error",
+            )
 
-        options: dict[str, Any] = {}
-        if request.max_tokens:
-            options["num_predict"] = request.max_tokens
-        if request.temperature is not None:
-            options["temperature"] = request.temperature
-        if request.top_p is not None:
-            options["top_p"] = request.top_p
-        if request.top_k is not None:
-            options["top_k"] = request.top_k
-        if request.stop_sequences:
-            options["stop"] = list(request.stop_sequences)
-
-        # If system_prompt is set, prepend as a system message
         if system_prompt:
             messages.insert(0, Message(role="system", content=system_prompt))
 
+        options = self._build_options(request)
         chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
+        _log_stderr(
+            "info", "ollama stream request",
+            model_alias=self.model_alias,
+            backend_model=self.backend_model,
+            msg_count=len(messages),
+            tool_count=len(tools) if tools else 0,
+            streaming=True,
+            keep_alive=str(self.keep_alive),
+        )
+
         try:
-            async for chunk in await self._client.chat(
+            stream = await self._client.chat(
                 model=self.backend_model,
                 messages=messages,
                 tools=tools,
                 options=options if options else None,
                 keep_alive=self.keep_alive,
                 stream=True,
-            ):
-                oai_chunk = _ollama_chunk_to_openai_chunk(chunk, chunk_id)
-                yield {"type": "raw", "data": json.dumps(oai_chunk)}
+            )
         except Exception as e:
+            _log_stderr(
+                "error", "ollama stream SDK call failed",
+                model_alias=self.model_alias,
+                backend_model=self.backend_model,
+                error=str(e),
+                trace=traceback.format_exc(),
+            )
             raise BridgeError(
                 message=str(e),
                 status_code=502,
                 error_type="api_error",
             ) from e
+
+        chunk_count = 0
+        async for chunk in stream:
+            chunk_count += 1
+            try:
+                oai_chunk = _ollama_chunk_to_openai_chunk(chunk, chunk_id)
+                yield {"type": "raw", "data": json.dumps(oai_chunk)}
+            except Exception:
+                _log_stderr(
+                    "error", "chunk translation failed",
+                    model_alias=self.model_alias,
+                    chunk_index=chunk_count,
+                    chunk_preview=str(chunk)[:500],
+                    trace=traceback.format_exc()[:1200],
+                )
+
+        _log_stderr(
+            "info", "ollama stream done",
+            model_alias=self.model_alias,
+            chunk_count=chunk_count,
+        )
 
     async def close(self):
         await self._client.close()

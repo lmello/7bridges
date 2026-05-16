@@ -41,9 +41,9 @@ class Settings:
     )
     ollama_sonnet_ctx: int = int(os.environ.get("OLLAMA_SONNET_CONTEXT_WINDOW", "32768"))
     ollama_haiku_model: str = os.environ.get(
-        "OLLAMA_HAIKU_MODEL", "qwen3.6:35b-a3b-coding-nvfp4"
+        "OLLAMA_HAIKU_MODEL", "qwen2.5-coder:7b-instruct-q4_K_M"
     )
-    ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "32768"))
+    ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "65536"))
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     model_routes: dict[str, ModelRoute] = {
@@ -104,6 +104,23 @@ class Settings:
             bridge="ollama",
             backend_model=ollama_haiku_model,
             display_name=f"Claude Haiku 4.0 (Ollama {ollama_haiku_model})",
+            context_window=ollama_haiku_ctx,
+            max_output_tokens=8192,
+        ),
+        # Clean aliases that avoid Anthropic retirement warnings
+        "ollama-sonnet": ModelRoute(
+            alias="ollama-sonnet",
+            bridge="ollama",
+            backend_model=ollama_sonnet_model,
+            display_name=f"Ollama Sonnet ({ollama_sonnet_model})",
+            context_window=ollama_sonnet_ctx,
+            max_output_tokens=8192,
+        ),
+        "ollama-haiku": ModelRoute(
+            alias="ollama-haiku",
+            bridge="ollama",
+            backend_model=ollama_haiku_model,
+            display_name=f"Ollama Haiku ({ollama_haiku_model})",
             context_window=ollama_haiku_ctx,
             max_output_tokens=8192,
         ),

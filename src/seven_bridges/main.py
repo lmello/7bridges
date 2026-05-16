@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 import json
+import traceback
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC
@@ -161,6 +162,8 @@ async def messages(
         )
 
     bridge = _get_bridge(route)
+    request.state.bridge_name = route.bridge
+    request.state.resolved_backend_model = route.backend_model
 
     # Validate request against vendor capabilities
     if request_has_images(anthropic_request) and not bridge.capabilities.supports_vision:
@@ -336,6 +339,25 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
             "type": "error",
             "error": {
                 "type": "invalid_request_error",
+                "message": str(exc),
+            },
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    _log_diagnostic(
+        "unhandled_error",
+        {"url": str(request.url), "method": request.method},
+        {"error": str(exc), "traceback": traceback.format_exc()},
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "type": "error",
+            "error": {
+                "type": "internal_error",
                 "message": str(exc),
             },
         },

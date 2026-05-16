@@ -97,6 +97,8 @@ class DebugMiddleware(BaseHTTPMiddleware):
             "query": str(request.query_params) if request.query_params else None,
             "headers": dict(request.headers.items()),
             "body": logged_body,
+            "bridge": getattr(request.state, "bridge_name", None),
+            "resolved_backend_model": getattr(request.state, "resolved_backend_model", None),
         }
 
         # Write request line immediately so logs exist even if handler crashes
