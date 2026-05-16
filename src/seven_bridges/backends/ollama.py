@@ -422,19 +422,44 @@ class OllamaBridge(Bridge):
             ) from e
 
         chunk_count = 0
-        async for chunk in stream:
-            chunk_count += 1
-            try:
-                oai_chunk = _ollama_chunk_to_openai_chunk(chunk, chunk_id)
-                yield {"type": "raw", "data": json.dumps(oai_chunk)}
-            except Exception:
-                _log_stderr(
-                    "error", "chunk translation failed",
-                    model_alias=self.model_alias,
-                    chunk_index=chunk_count,
-                    chunk_preview=str(chunk)[:500],
-                    trace=traceback.format_exc()[:1200],
-                )
+        try:
+            async for chunk in stream:
+                chunk_count += 1
+                try:
+                    oai_chunk = _ollama_chunk_to_openai_chunk(chunk, chunk_id)
+                    yield {"type": "raw", "data": json.dumps(oai_chunk)}
+                except Exception:
+                    _log_stderr(
+                        "error", "chunk translation failed",
+                        model_alias=self.model_alias,
+                        chunk_index=chunk_count,
+                        chunk_preview=str(chunk)[:500],
+                        trace=traceback.format_exc()[:1200],
+                    )
+        except Exception as e:
+            _log_stderr(
+                "error", "ollama stream parse error",
+                model_alias=self.model_alias,
+                chunk_count=chunk_count,
+                error=str(e),
+                trace=traceback.format_exc()[:1500],
+            )
+            yield {
+                "type": "raw",
+                "data": json.dumps(
+                    {
+                        "id": chunk_id,
+                        "object": "chat.completion.chunk",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {},
+                                "finish_reason": "content_filter",
+                            }
+                        ],
+                    }
+                ),
+            }
 
         _log_stderr(
             "info", "ollama stream done",
