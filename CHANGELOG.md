@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-05-16)
+
+### Documentation
+
+- **ollama**: Document BFS tree inversion test for each model
+  ([`2cc143e`](https://github.com/sdkks/7bridges/commit/2cc143e0b24ace4509dc2cadac1ae2e90daa9ef6))
+
+- **ollama**: Fix table formatting, correct gemma4 to MoE architecture
+  ([`9a9046b`](https://github.com/sdkks/7bridges/commit/9a9046b0bfa6379f6a654303012f125ccc36b52d))
+
+### Features
+
+- **ollama**: Introduce Ollama support
+  ([`fb06653`](https://github.com/sdkks/7bridges/commit/fb066537bf98d76d309dda677d08b7890f36cb57))
+
+
 ## v1.1.0 (2026-05-16)
 
 ### Bug Fixes
