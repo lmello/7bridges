@@ -6,7 +6,7 @@ An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy th
 
 ## Why I Built This
 
-I wanted to use other models (DeepSeek, Kimi, etc.) with Claude Code without fighting LiteLLM every step of the way. With LiteLLM I kept running into:
+I wanted to use other models (DeepSeek, Kimi, Ollama, etc.) with Claude Code without fighting LiteLLM every step of the way. With LiteLLM I kept running into:
 
 - **Reasoning/thinking blocks** not being translated correctly — Claude Code expects `thinking` content blocks with signatures; LiteLLM either drops them or mangles the format
 - **Cache token accounting** being inconsistent — `cache_read_input_tokens` and `cache_creation_input_tokens` would be missing or wrong
@@ -49,6 +49,7 @@ Each backend is a "bridge":
 |---|---|---|---|---|---|---|
 | DeepSeek | `api.deepseek.com` | `deepseek-v4-pro` (Sonnet), `deepseek-v4-flash` (Haiku) | ❌ | ✅ | ✅ | Live |
 | Kimi | `api.kimi.com/coding/v1` | `kimi-for-coding` (K2.6) | ✅ | ✅ | ✅ | Live |
+| Ollama | `localhost:11434` | Configurable via env vars | ✅ | ✅ | ✅ | Live |
 
 > **Note on vision/image support:** DeepSeek v4 does not support the `image_in` tool yet. For debugging, development, or any image-related tasks, use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) — it maps to Kimi K2.6 which has full vision capabilities.
 
@@ -60,6 +61,44 @@ Each backend is a "bridge":
 | `claude-haiku-4-5` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
 | `claude-opus-4-6` | Kimi | `kimi-for-coding` | 262,144 | 32,768 |
 | `claude-haiku-4-5-20251001` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
+| `ollama-sonnet` | Ollama | `qwen3.6:35b-a3b-coding-nvfp4` | 32,768 | 8,192 |
+| `ollama-haiku` | Ollama | `qwen3.5:9b` | 65,536 | 8,192 |
+| `ollama-nemo` | Ollama | `nemotron-3-nano:4b` | 65,536 | 8,192 |
+
+## Ollama Setup
+
+The Ollama bridge talks to your local Ollama instance via the [ollama-python SDK](https://github.com/ollama/ollama-python). Models are configured through environment variables in `.envrc`:
+
+```sh
+export OLLAMA_HOST="http://127.0.0.1:11434"
+export OLLAMA_SONNET_MODEL="qwen3.6:35b-a3b-coding-nvfp4"
+export OLLAMA_SONNET_CONTEXT_WINDOW=32768
+export OLLAMA_HAIKU_MODEL="qwen3.5:9b"
+export OLLAMA_HAIKU_CONTEXT_WINDOW=65536
+export OLLAMA_NEMO_MODEL="nemotron-3-nano:4b"
+export OLLAMA_NEMO_CONTEXT_WINDOW=65536
+export OLLAMA_KEEP_ALIVE="300s"
+```
+
+**Pull the models you want before using them:**
+
+```sh
+ollama pull qwen3.6:35b-a3b-coding-nvfp4
+ollama pull qwen3.5:9b
+ollama pull nemotron-3-nano:4b
+```
+
+### Using Ollama models in Claude Code
+
+Ollama models use the aliases `ollama-sonnet`, `ollama-haiku`, and `ollama-nemo`. They are **not** listed in the default `/model` picker (Claude Code filters to known Anthropic aliases). Switch to them explicitly:
+
+```
+/model ollama-sonnet
+/model ollama-haiku
+/model ollama-nemo
+```
+
+> **Tip:** Bump the context window in `.envrc` if your hardware allows it. `OLLAMA_SONNET_CONTEXT_WINDOW` and `OLLAMA_HAIKU_CONTEXT_WINDOW` control the `num_ctx` parameter passed to Ollama. On a Mac with 36 GB unified memory, 64k is comfortable for 9B models; lower to 32k if you see memory pressure.
 
 ## Setup
 
@@ -168,7 +207,8 @@ curl -X POST http://localhost:4001/v1/messages/count_tokens \
 │   ├── backends/
 │   │   ├── base.py          # Abstract Bridge base class + capabilities
 │   │   ├── deepseek.py      # DeepSeek bridge
-│   │   └── kimi.py          # Kimi bridge
+│   │   ├── kimi.py          # Kimi bridge
+│   │   └── ollama.py        # Ollama bridge
 │   └── translation/
 │       ├── request.py       # Anthropic → OpenAI request translation
 │       ├── response.py      # OpenAI → Anthropic response translation
