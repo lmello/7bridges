@@ -35,7 +35,7 @@ class Settings:
     deepseek_api_key: str = os.environ.get("DEEPSEEK_API_KEY", "")
     kimi_api_key: str = os.environ.get("KIMI_CODE_API_KEY", "")
     ollama_host: str = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-    ollama_keep_alive: str = os.environ.get("OLLAMA_KEEP_ALIVE", "300")
+    ollama_keep_alive: str = os.environ.get("OLLAMA_KEEP_ALIVE", "300s")
     ollama_sonnet_model: str = os.environ.get(
         "OLLAMA_SONNET_MODEL", "qwen3.6:35b-a3b-coding-nvfp4"
     )
