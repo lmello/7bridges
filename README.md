@@ -107,6 +107,8 @@ Ollama models use the aliases `ollama-sonnet`, `ollama-haiku`, `ollama-gpt-oss`,
 
 > **Known quirk:** `ollama-gpt-oss` has a ~50% failure rate on first-time `Write` tool calls — the model sometimes emits the tool call with incomplete parameters. Subsequent retries almost always succeed as the model corrects itself.
 
+See [`docs/OLLAMA_MODELS.md`](docs/OLLAMA_MODELS.md) for full capabilities, architecture details, and per-model notes.
+
 ## Setup
 
 ```sh
