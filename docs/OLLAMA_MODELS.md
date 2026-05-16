@@ -2,12 +2,14 @@
 
 Models tested and confirmed working with the 7 Bridges Ollama backend. Each model was evaluated on a BFS binary tree inversion task — writing a Python script with a queue-based approach to `/tmp/bfs.py` — to verify reasoning, coding, and tool-use (Read/Write/Edit) end-to-end. All models run locally on Apple Silicon M2 Pro with 32 GB unified memory. Capabilities determined via `ollama show <model>`.
 
+```
 | Alias | Model | Params | Activated | Type | Architecture | Quant | Native Context | Vision | Tools | Thinking |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `ollama-sonnet` | `qwen3.6:35b-a3b-coding-nvfp4` | 35.1B | ~3B | MoE | qwen3_5_moe | nvfp4 | 262,144 | ✅ | ✅ | ✅ |
 | `ollama-haiku` | `qwen3.5:9b` | 9.7B | 9.7B | Dense | qwen35 | Q4_K_M | 262,144 | ✅ | ✅ | ✅ |
 | `ollama-gpt-oss` | `gpt-oss:20b` | 20.9B | — | MoE | gptoss | MXFP4 | 131,072 | ❌ | ✅ | ✅ |
 | `ollama-gemma` | `gemma4:26b` | 25.8B | 25.8B | Dense | gemma4 | Q4_K_M | 262,144 | ✅ | ✅ | ✅ |
+```
 
 ## ollama-sonnet — qwen3.6:35b-a3b-coding-nvfp4
 
