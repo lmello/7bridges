@@ -63,7 +63,7 @@ Each backend is a "bridge":
 | `claude-haiku-4-5-20251001` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
 | `ollama-sonnet` | Ollama | `qwen3.6:35b-a3b-coding-nvfp4` | 32,768 | 8,192 |
 | `ollama-haiku` | Ollama | `qwen3.5:9b` | 65,536 | 8,192 |
-| `ollama-nemo` | Ollama | `nemotron-3-nano:4b` | 65,536 | 8,192 |
+| `ollama-gpt-oss` | Ollama | `gpt-oss:20b` | 65,536 | 8,192 |
 
 ## Ollama Setup
 
@@ -75,8 +75,8 @@ export OLLAMA_SONNET_MODEL="qwen3.6:35b-a3b-coding-nvfp4"
 export OLLAMA_SONNET_CONTEXT_WINDOW=32768
 export OLLAMA_HAIKU_MODEL="qwen3.5:9b"
 export OLLAMA_HAIKU_CONTEXT_WINDOW=65536
-export OLLAMA_NEMO_MODEL="nemotron-3-nano:4b"
-export OLLAMA_NEMO_CONTEXT_WINDOW=65536
+export OLLAMA_GPTOSS_MODEL="gpt-oss:20b"
+export OLLAMA_GPTOSS_CONTEXT_WINDOW=65536
 export OLLAMA_KEEP_ALIVE="300s"
 ```
 
@@ -85,7 +85,7 @@ export OLLAMA_KEEP_ALIVE="300s"
 ```sh
 ollama pull qwen3.6:35b-a3b-coding-nvfp4
 ollama pull qwen3.5:9b
-ollama pull nemotron-3-nano:4b
+ollama pull gpt-oss:20b
 ```
 
 ### Using Ollama models in Claude Code
@@ -95,7 +95,7 @@ Ollama models use the aliases `ollama-sonnet`, `ollama-haiku`, and `ollama-nemo`
 ```
 /model ollama-sonnet
 /model ollama-haiku
-/model ollama-nemo
+/model ollama-gpt-oss
 ```
 
 > **Tip:** Bump the context window in `.envrc` if your hardware allows it. `OLLAMA_SONNET_CONTEXT_WINDOW` and `OLLAMA_HAIKU_CONTEXT_WINDOW` control the `num_ctx` parameter passed to Ollama. These defaults were tested on an Apple Silicon M2 Pro with 32 GB unified memory — your own limits will vary with hardware and the models you choose. Measure the tradeoffs and adjust via env vars.

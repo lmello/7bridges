@@ -44,10 +44,10 @@ class Settings:
         "OLLAMA_HAIKU_MODEL", "qwen3.5:9b"
     )
     ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "65536"))
-    ollama_nemo_model: str = os.environ.get(
-        "OLLAMA_NEMO_MODEL", "nemotron-3-nano:4b"
+    ollama_gptoss_model: str = os.environ.get(
+        "OLLAMA_GPTOSS_MODEL", "gpt-oss:20b"
     )
-    ollama_nemo_ctx: int = int(os.environ.get("OLLAMA_NEMO_CONTEXT_WINDOW", "65536"))
+    ollama_gptoss_ctx: int = int(os.environ.get("OLLAMA_GPTOSS_CONTEXT_WINDOW", "65536"))
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     model_routes: dict[str, ModelRoute] = {
@@ -128,12 +128,12 @@ class Settings:
             context_window=ollama_haiku_ctx,
             max_output_tokens=8192,
         ),
-        "ollama-nemo": ModelRoute(
-            alias="ollama-nemo",
+        "ollama-gpt-oss": ModelRoute(
+            alias="ollama-gpt-oss",
             bridge="ollama",
-            backend_model=ollama_nemo_model,
-            display_name=f"Ollama Nemo ({ollama_nemo_model})",
-            context_window=ollama_nemo_ctx,
+            backend_model=ollama_gptoss_model,
+            display_name=f"Ollama GPT-OSS ({ollama_gptoss_model})",
+            context_window=ollama_gptoss_ctx,
             max_output_tokens=8192,
         ),
     }

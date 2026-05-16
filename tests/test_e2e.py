@@ -836,7 +836,7 @@ def test_list_models():
     assert "claude-haiku-4-0" in model_ids
     assert "ollama-sonnet" in model_ids
     assert "ollama-haiku" in model_ids
-    assert "ollama-nemo" in model_ids
+    assert "ollama-gpt-oss" in model_ids
 
 
 def test_health():
