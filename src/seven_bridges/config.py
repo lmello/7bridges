@@ -43,7 +43,7 @@ class Settings:
     ollama_haiku_model: str = os.environ.get(
         "OLLAMA_HAIKU_MODEL", "qwen3.5:9b"
     )
-    ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "131072"))
+    ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "65536"))
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     model_routes: dict[str, ModelRoute] = {
