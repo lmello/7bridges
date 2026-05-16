@@ -44,6 +44,10 @@ class Settings:
         "OLLAMA_HAIKU_MODEL", "qwen3.5:9b"
     )
     ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "65536"))
+    ollama_nemo_model: str = os.environ.get(
+        "OLLAMA_NEMO_MODEL", "nemotron-3-nano:4b"
+    )
+    ollama_nemo_ctx: int = int(os.environ.get("OLLAMA_NEMO_CONTEXT_WINDOW", "65536"))
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     model_routes: dict[str, ModelRoute] = {
@@ -122,6 +126,14 @@ class Settings:
             backend_model=ollama_haiku_model,
             display_name=f"Ollama Haiku ({ollama_haiku_model})",
             context_window=ollama_haiku_ctx,
+            max_output_tokens=8192,
+        ),
+        "ollama-nemo": ModelRoute(
+            alias="ollama-nemo",
+            bridge="ollama",
+            backend_model=ollama_nemo_model,
+            display_name=f"Ollama Nemo ({ollama_nemo_model})",
+            context_window=ollama_nemo_ctx,
             max_output_tokens=8192,
         ),
     }
