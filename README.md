@@ -98,7 +98,7 @@ Ollama models use the aliases `ollama-sonnet`, `ollama-haiku`, and `ollama-nemo`
 /model ollama-nemo
 ```
 
-> **Tip:** Bump the context window in `.envrc` if your hardware allows it. `OLLAMA_SONNET_CONTEXT_WINDOW` and `OLLAMA_HAIKU_CONTEXT_WINDOW` control the `num_ctx` parameter passed to Ollama. On a Mac with 36 GB unified memory, 64k is comfortable for 9B models; lower to 32k if you see memory pressure.
+> **Tip:** Bump the context window in `.envrc` if your hardware allows it. `OLLAMA_SONNET_CONTEXT_WINDOW` and `OLLAMA_HAIKU_CONTEXT_WINDOW` control the `num_ctx` parameter passed to Ollama. These defaults were tested on an Apple Silicon M2 Pro with 32 GB unified memory — your own limits will vary with hardware and the models you choose. Measure the tradeoffs and adjust via env vars.
 
 ## Setup
 
