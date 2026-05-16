@@ -36,7 +36,29 @@ The debug logger (`src/seven_bridges/debug.py`) is the primary diagnostic tool f
 - Maintain backward compatibility in log structure (new fields are fine; removing fields is not)
 - Pass `tests/test_debug.py`
 
-## Testing Integrity & Consistency
+## Python Environment
+
+This project uses **uv** for Python version management, virtual environments, and dependencies. `.python-version` pins Python 3.13 — `uv` respects it automatically.
+
+```bash
+# Install the pinned Python version (one-time)
+uv python install
+
+# Create/recreate the venv
+uv venv
+
+# Add a dependency
+uv add <package>
+
+# Regenerate requirements.txt after adding/removing packages
+uv pip compile pyproject.toml -o requirements.txt
+
+# Run anything in the venv
+uv run pytest
+uv run python -c "..."
+```
+
+Never use `pip install` directly — there is no pip binary in the venv, and `pyenv` may not have the version requested by `.python-version` installed.
 
 ### Running Tests
 

@@ -556,6 +556,241 @@ def test_kimi_streaming_tool_calls():
 
 
 # ---------------------------------------------------------------------------
+# Ollama e2e tests
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+def test_ollama_non_streaming_text():
+    respx.post("http://127.0.0.1:11434/api/chat").mock(
+        return_value=Response(
+            200,
+            json={
+                "model": "qwen3.6:35b-a3b-coding-nvfp4",
+                "created_at": "2024-01-01T00:00:00Z",
+                "done": True,
+                "done_reason": "stop",
+                "message": {"role": "assistant", "content": "Hello from Ollama!"},
+                "prompt_eval_count": 10,
+                "eval_count": 5,
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-sonnet-4-0",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "message"
+    assert data["model"] == "claude-sonnet-4-0"
+    assert len(data["content"]) == 1
+    assert data["content"][0]["type"] == "text"
+    assert data["content"][0]["text"] == "Hello from Ollama!"
+    assert data["stop_reason"] == "end_turn"
+    assert data["usage"]["input_tokens"] == 10
+    assert data["usage"]["output_tokens"] == 5
+
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["model"] == "qwen3.6:35b-a3b-coding-nvfp4"
+
+
+@respx.mock
+def test_ollama_streaming_text():
+    chunks = [
+        {
+            "model": "qwen3.6:35b-a3b-coding-nvfp4",
+            "created_at": "2024-01-01T00:00:00Z",
+            "done": False,
+            "message": {"role": "assistant", "content": "Hello"},
+        },
+        {
+            "model": "qwen3.6:35b-a3b-coding-nvfp4",
+            "created_at": "2024-01-01T00:00:00Z",
+            "done": False,
+            "message": {"role": "assistant", "content": " world"},
+        },
+        {
+            "model": "qwen3.6:35b-a3b-coding-nvfp4",
+            "created_at": "2024-01-01T00:00:00Z",
+            "done": True,
+            "done_reason": "stop",
+            "message": {"role": "assistant", "content": ""},
+            "prompt_eval_count": 10,
+            "eval_count": 5,
+        },
+    ]
+
+    respx.post("http://127.0.0.1:11434/api/chat").mock(
+        return_value=Response(
+            200,
+            text="\n".join(json.dumps(c) for c in chunks),
+            headers={"Content-Type": "application/x-ndjson"},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-sonnet-4-0",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+    assert events[0][0] == "message_start"
+    assert events[0][1]["message"]["model"] == "claude-sonnet-4-0"
+
+    text_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "text_delta"
+    ]
+    assert len(text_deltas) == 2
+    assert text_deltas[0][1]["delta"]["text"] == "Hello"
+    assert text_deltas[1][1]["delta"]["text"] == " world"
+
+    assert events[-2][0] == "message_delta"
+    assert events[-2][1]["delta"]["stop_reason"] == "end_turn"
+    assert events[-1][0] == "message_stop"
+
+
+@respx.mock
+def test_ollama_tool_call_non_streaming():
+    respx.post("http://127.0.0.1:11434/api/chat").mock(
+        return_value=Response(
+            200,
+            json={
+                "model": "qwen3.6:35b-a3b-coding-nvfp4",
+                "created_at": "2024-01-01T00:00:00Z",
+                "done": True,
+                "done_reason": "tool_calls",
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "get_weather",
+                                "arguments": {"location": "NYC"},
+                            }
+                        }
+                    ],
+                },
+                "prompt_eval_count": 20,
+                "eval_count": 15,
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-sonnet-4-0",
+            "messages": [{"role": "user", "content": "What's the weather in NYC?"}],
+            "max_tokens": 100,
+            "tools": [
+                {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"location": {"type": "string"}},
+                        "required": ["location"],
+                    },
+                }
+            ],
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["stop_reason"] == "tool_use"
+    assert len(data["content"]) == 1
+    assert data["content"][0]["type"] == "tool_use"
+    assert data["content"][0]["name"] == "get_weather"
+    assert data["content"][0]["input"] == {"location": "NYC"}
+
+
+@respx.mock
+def test_ollama_with_thinking():
+    respx.post("http://127.0.0.1:11434/api/chat").mock(
+        return_value=Response(
+            200,
+            json={
+                "model": "qwen3.6:35b-a3b-coding-nvfp4",
+                "created_at": "2024-01-01T00:00:00Z",
+                "done": True,
+                "done_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": "The answer is 42.",
+                    "thinking": "Let me think about this...",
+                },
+                "prompt_eval_count": 10,
+                "eval_count": 5,
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-sonnet-4-0",
+            "messages": [{"role": "user", "content": "What is the answer?"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["content"]) == 2
+    assert data["content"][0]["type"] == "thinking"
+    assert data["content"][0]["thinking"] == "Let me think about this..."
+    assert data["content"][1]["type"] == "text"
+    assert data["content"][1]["text"] == "The answer is 42."
+
+
+@respx.mock
+def test_ollama_upstream_error():
+    respx.post("http://127.0.0.1:11434/api/chat").mock(
+        return_value=Response(502, json={"error": "model not found"})
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-sonnet-4-0",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 502
+    data = resp.json()
+    assert data["type"] == "error"
+    assert data["error"]["type"] == "api_error"
+
+
+# ---------------------------------------------------------------------------
 # Common e2e tests
 # ---------------------------------------------------------------------------
 
@@ -597,6 +832,8 @@ def test_list_models():
     assert "claude-opus-4-6" in model_ids
     assert "claude-sonnet-4-6" in model_ids
     assert "claude-haiku-4-5" in model_ids
+    assert "claude-sonnet-4-0" in model_ids
+    assert "claude-haiku-4-0" in model_ids
 
 
 def test_health():

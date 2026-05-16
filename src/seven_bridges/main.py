@@ -15,6 +15,7 @@ from starlette.responses import Response
 from seven_bridges.backends.base import Bridge, BridgeError
 from seven_bridges.backends.deepseek import DeepSeekBridge
 from seven_bridges.backends.kimi import KimiBridge
+from seven_bridges.backends.ollama import OllamaBridge
 from seven_bridges.config import ModelRoute, settings
 from seven_bridges.debug import DebugMiddleware
 from seven_bridges.models.anthropic import (
@@ -105,6 +106,12 @@ def _get_bridge(route: ModelRoute) -> Bridge:
                 error_type="configuration_error",
             )
         return KimiBridge(api_key=settings.kimi_api_key, **kwargs)
+    elif route.bridge == "ollama":
+        return OllamaBridge(
+            api_base=settings.ollama_host,
+            keep_alive=settings.ollama_keep_alive,
+            **kwargs,
+        )
     else:
         raise BridgeError(
             f"Unknown bridge: {route.bridge}",

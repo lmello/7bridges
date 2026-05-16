@@ -34,6 +34,16 @@ class Settings:
 
     deepseek_api_key: str = os.environ.get("DEEPSEEK_API_KEY", "")
     kimi_api_key: str = os.environ.get("KIMI_CODE_API_KEY", "")
+    ollama_host: str = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+    ollama_keep_alive: str = os.environ.get("OLLAMA_KEEP_ALIVE", "300")
+    ollama_sonnet_model: str = os.environ.get(
+        "OLLAMA_SONNET_MODEL", "qwen3.6:35b-a3b-coding-nvfp4"
+    )
+    ollama_sonnet_ctx: int = int(os.environ.get("OLLAMA_SONNET_CONTEXT_WINDOW", "32768"))
+    ollama_haiku_model: str = os.environ.get(
+        "OLLAMA_HAIKU_MODEL", "qwen3.6:35b-a3b-coding-nvfp4"
+    )
+    ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "32768"))
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     model_routes: dict[str, ModelRoute] = {
@@ -79,6 +89,23 @@ class Settings:
             display_name="Claude Haiku 4.5-20251001 (DeepSeek V4 Flash)",
             context_window=1_048_576,
             max_output_tokens=393_216,
+        ),
+        # Ollama routes — configurable via OLLAMA_SONNET_MODEL / OLLAMA_HAIKU_MODEL env vars
+        "claude-sonnet-4-0": ModelRoute(
+            alias="claude-sonnet-4-0",
+            bridge="ollama",
+            backend_model=ollama_sonnet_model,
+            display_name=f"Claude Sonnet 4.0 (Ollama {ollama_sonnet_model})",
+            context_window=ollama_sonnet_ctx,
+            max_output_tokens=8192,
+        ),
+        "claude-haiku-4-0": ModelRoute(
+            alias="claude-haiku-4-0",
+            bridge="ollama",
+            backend_model=ollama_haiku_model,
+            display_name=f"Claude Haiku 4.0 (Ollama {ollama_haiku_model})",
+            context_window=ollama_haiku_ctx,
+            max_output_tokens=8192,
         ),
     }
 
