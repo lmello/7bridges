@@ -4,6 +4,15 @@ An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy th
 
 > **Agentic development guide:** See [`CLAUDE.md`](CLAUDE.md) (also symlinked as [`AGENTS.md`](AGENTS.md)) for conventions on testing integrity, development cadence, backend capability audits, and common pitfalls when working with this codebase.
 
+# What's new?
+
+Added support for Ollama. Some working examples are further down.
+
+
+https://github.com/user-attachments/assets/8e6fa365-d528-4307-ad36-61fa040a4cc2
+
+
+
 ## Why I Built This
 
 I wanted to use other models (DeepSeek, Kimi, Ollama, etc.) with Claude Code without fighting LiteLLM every step of the way. With LiteLLM I kept running into:
