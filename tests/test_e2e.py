@@ -837,6 +837,7 @@ def test_list_models():
     assert "ollama-sonnet" in model_ids
     assert "ollama-haiku" in model_ids
     assert "ollama-gpt-oss" in model_ids
+    assert "ollama-gemma" in model_ids
 
 
 def test_health():

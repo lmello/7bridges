@@ -48,6 +48,10 @@ class Settings:
         "OLLAMA_GPTOSS_MODEL", "gpt-oss:20b"
     )
     ollama_gptoss_ctx: int = int(os.environ.get("OLLAMA_GPTOSS_CONTEXT_WINDOW", "65536"))
+    ollama_gemma_model: str = os.environ.get(
+        "OLLAMA_GEMMA_MODEL", "gemma4:26b"
+    )
+    ollama_gemma_ctx: int = int(os.environ.get("OLLAMA_GEMMA_CONTEXT_WINDOW", "65536"))
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     model_routes: dict[str, ModelRoute] = {
@@ -134,6 +138,14 @@ class Settings:
             backend_model=ollama_gptoss_model,
             display_name=f"Ollama GPT-OSS ({ollama_gptoss_model})",
             context_window=ollama_gptoss_ctx,
+            max_output_tokens=8192,
+        ),
+        "ollama-gemma": ModelRoute(
+            alias="ollama-gemma",
+            bridge="ollama",
+            backend_model=ollama_gemma_model,
+            display_name=f"Ollama Gemma ({ollama_gemma_model})",
+            context_window=ollama_gemma_ctx,
             max_output_tokens=8192,
         ),
     }

@@ -64,10 +64,11 @@ Each backend is a "bridge":
 | `ollama-sonnet` | Ollama | `qwen3.6:35b-a3b-coding-nvfp4` | 32,768 | 8,192 |
 | `ollama-haiku` | Ollama | `qwen3.5:9b` | 65,536 | 8,192 |
 | `ollama-gpt-oss` | Ollama | `gpt-oss:20b` | 65,536 | 8,192 |
+| `ollama-gemma` | Ollama | `gemma4:26b` | 65,536 | 8,192 |
 
 ## Ollama Setup
 
-The Ollama bridge talks to your local Ollama instance via the [ollama-python SDK](https://github.com/ollama/ollama-python). The aliases `ollama-sonnet`, `ollama-haiku`, and `ollama-gpt-oss` map to open-weight models that serve as rough local analogues for the Anthropic model tiers — they trade some capability for zero-cost, offline, private inference. Models are configured through environment variables in `.envrc`:
+The Ollama bridge talks to your local Ollama instance via the [ollama-python SDK](https://github.com/ollama/ollama-python). The aliases `ollama-sonnet`, `ollama-haiku`, `ollama-gpt-oss`, and `ollama-gemma` map to open-weight models that serve as rough local analogues for the Anthropic model tiers — they trade some capability for zero-cost, offline, private inference. Models are configured through environment variables in `.envrc`:
 
 ```sh
 export OLLAMA_HOST="http://127.0.0.1:11434"
@@ -77,6 +78,8 @@ export OLLAMA_HAIKU_MODEL="qwen3.5:9b"
 export OLLAMA_HAIKU_CONTEXT_WINDOW=65536
 export OLLAMA_GPTOSS_MODEL="gpt-oss:20b"
 export OLLAMA_GPTOSS_CONTEXT_WINDOW=65536
+export OLLAMA_GEMMA_MODEL="gemma4:26b"
+export OLLAMA_GEMMA_CONTEXT_WINDOW=65536
 export OLLAMA_KEEP_ALIVE="300s"
 ```
 
@@ -86,19 +89,23 @@ export OLLAMA_KEEP_ALIVE="300s"
 ollama pull qwen3.6:35b-a3b-coding-nvfp4
 ollama pull qwen3.5:9b
 ollama pull gpt-oss:20b
+ollama pull gemma4:26b
 ```
 
 ### Using Ollama models in Claude Code
 
-Ollama models use the aliases `ollama-sonnet`, `ollama-haiku`, and `ollama-nemo`. They are **not** listed in the default `/model` picker (Claude Code filters to known Anthropic aliases). Switch to them explicitly:
+Ollama models use the aliases `ollama-sonnet`, `ollama-haiku`, `ollama-gpt-oss`, and `ollama-gemma`. They are **not** listed in the default `/model` picker (Claude Code filters to known Anthropic aliases). Switch to them explicitly:
 
 ```
 /model ollama-sonnet
 /model ollama-haiku
 /model ollama-gpt-oss
+/model ollama-gemma
 ```
 
 > **Tip:** Bump the context window in `.envrc` if your hardware allows it. `OLLAMA_SONNET_CONTEXT_WINDOW` and `OLLAMA_HAIKU_CONTEXT_WINDOW` control the `num_ctx` parameter passed to Ollama. These defaults were tested on an Apple Silicon M2 Pro with 32 GB unified memory — your own limits will vary with hardware and the models you choose. Measure the tradeoffs and adjust via env vars.
+
+> **Known quirk:** `ollama-gpt-oss` has a ~50% failure rate on first-time `Write` tool calls — the model sometimes emits the tool call with incomplete parameters. Subsequent retries almost always succeed as the model corrects itself.
 
 ## Setup
 
