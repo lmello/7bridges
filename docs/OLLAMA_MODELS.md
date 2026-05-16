@@ -2,14 +2,12 @@
 
 Models tested and confirmed working with the 7 Bridges Ollama backend. Each model was evaluated on a BFS binary tree inversion task — writing a Python script with a queue-based approach to `/tmp/bfs.py` — to verify reasoning, coding, and tool-use (Read/Write/Edit) end-to-end. All models run locally on Apple Silicon M2 Pro with 32 GB unified memory. Capabilities determined via `ollama show <model>`.
 
-```
 | Alias | Model | Params | Activated | Type | Architecture | Quant | Native Context | Vision | Tools | Thinking |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|---|---|
 | `ollama-sonnet` | `qwen3.6:35b-a3b-coding-nvfp4` | 35.1B | ~3B | MoE | qwen3_5_moe | nvfp4 | 262,144 | ✅ | ✅ | ✅ |
 | `ollama-haiku` | `qwen3.5:9b` | 9.7B | 9.7B | Dense | qwen35 | Q4_K_M | 262,144 | ✅ | ✅ | ✅ |
 | `ollama-gpt-oss` | `gpt-oss:20b` | 20.9B | — | MoE | gptoss | MXFP4 | 131,072 | ❌ | ✅ | ✅ |
-| `ollama-gemma` | `gemma4:26b` | 25.8B | 25.8B | Dense | gemma4 | Q4_K_M | 262,144 | ✅ | ✅ | ✅ |
-```
+| `ollama-gemma` | `gemma4:26b` | 25.2B | ~3.8B | MoE | gemma4 | Q4_K_M | 262,144 | ✅ | ✅ | ✅ |
 
 ## ollama-sonnet — qwen3.6:35b-a3b-coding-nvfp4
 
@@ -25,10 +23,10 @@ Qwen 3.5 9B dense model at Q4_K_M quantization. All 9.7B parameters active on ev
 
 ## ollama-gpt-oss — gpt-oss:20b
 
-GPT-OSS 20B MoE at MXFP4 quantization. 20.9B total with a subset activated per token (exact activated count not published). No vision support, but handles tools and thinking. Intermediate size between haiku and sonnet. Native context of 128k; we run at 64k for memory headroom.
+GPT-OSS 20B MoE at MXFP4 quantization. 20.9B total with a subset activated per token (exact activated count not published by the model author). No vision support, but handles tools and thinking. Intermediate size between haiku and sonnet. Native context of 128k; we run at 64k for memory headroom.
 
 **Known quirk:** ~50% failure rate on first-time `Write` tool calls — the model sometimes emits the tool call with incomplete parameters. Subsequent retries almost always succeed as the model corrects itself. `Edit` and `Read` calls are reliable from the first attempt.
 
 ## ollama-gemma — gemma4:26b
 
-Gemma 4 26B dense model at Q4_K_M quantization. All 25.8B parameters active on every token. Full capabilities — vision, tools, thinking. 256k native context; runs at 64k. Google's open model, good all-rounder for local agentic use.
+Gemma 4 26B MoE (Mixture of Experts) at Q4_K_M quantization. 25.2B total parameters, ~3.8B activated per token (8 active experts out of 128 total, plus 1 shared). Full capabilities — vision, tools, thinking. 256k native context; runs at 64k. Google's open model, good all-rounder for local agentic use.
