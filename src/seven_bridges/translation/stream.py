@@ -203,6 +203,18 @@ async def translate_openai_stream(
                             },
                         },
                     )
+                    if tc_args:
+                        yield _make_sse(
+                            "content_block_delta",
+                            {
+                                "type": "content_block_delta",
+                                "index": open_block_index,
+                                "delta": {
+                                    "type": "input_json_delta",
+                                    "partial_json": tc_args,
+                                },
+                            },
+                        )
                 else:
                     # Existing tool call receiving more data
                     tc_state = tool_call_map[tc_index]

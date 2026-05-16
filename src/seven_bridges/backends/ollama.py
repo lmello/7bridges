@@ -188,9 +188,12 @@ def _ollama_chat_to_anthropic(
 
 
 def _ollama_chunk_to_openai_chunk(
-    chunk: ChatResponse, chunk_id: str
+    chunk: ChatResponse, chunk_id: str, prev_args_len: dict[int, int] | None = None
 ) -> dict[str, Any]:
     """Convert a streaming Ollama ChatResponse chunk to an OpenAI-format chunk."""
+    if prev_args_len is None:
+        prev_args_len = {}
+
     oai_chunk: dict[str, Any] = {
         "id": chunk_id,
         "object": "chat.completion.chunk",
@@ -220,15 +223,36 @@ def _ollama_chunk_to_openai_chunk(
             args = tc.function.arguments
             if not isinstance(args, str):
                 args = json.dumps(args)
-            tool_calls.append(
-                {
-                    "index": i,
-                    "id": f"call_{uuid.uuid4().hex[:8]}",
-                    "type": "function",
-                    "function": {"name": tc.function.name, "arguments": args},
-                }
-            )
-        delta["tool_calls"] = tool_calls
+            # Only emit the incremental suffix — the stream translator appends
+            # partial_json fragments, so sending the full args each time would
+            # produce concatenated duplicates.
+            prev_len = prev_args_len.get(i, 0)
+            if len(args) > prev_len:
+                tool_calls.append(
+                    {
+                        "index": i,
+                        "id": f"call_{uuid.uuid4().hex[:8]}",
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": args[prev_len:],
+                        },
+                    }
+                )
+                prev_args_len[i] = len(args)
+            elif prev_len == 0 and not args:
+                # First chunk with empty args (name-only): emit to create the block
+                tool_calls.append(
+                    {
+                        "index": i,
+                        "id": f"call_{uuid.uuid4().hex[:8]}",
+                        "type": "function",
+                        "function": {"name": tc.function.name, "arguments": ""},
+                    }
+                )
+                prev_args_len[i] = 0
+        if tool_calls:
+            delta["tool_calls"] = tool_calls
 
     oai_chunk["choices"][0]["delta"] = delta
 
@@ -422,11 +446,14 @@ class OllamaBridge(Bridge):
             ) from e
 
         chunk_count = 0
+        prev_args_len: dict[int, int] = {}
         try:
             async for chunk in stream:
                 chunk_count += 1
                 try:
-                    oai_chunk = _ollama_chunk_to_openai_chunk(chunk, chunk_id)
+                    oai_chunk = _ollama_chunk_to_openai_chunk(
+                        chunk, chunk_id, prev_args_len
+                    )
                     yield {"type": "raw", "data": json.dumps(oai_chunk)}
                 except Exception:
                     _log_stderr(
