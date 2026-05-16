@@ -67,7 +67,7 @@ Each backend is a "bridge":
 
 ## Ollama Setup
 
-The Ollama bridge talks to your local Ollama instance via the [ollama-python SDK](https://github.com/ollama/ollama-python). Models are configured through environment variables in `.envrc`:
+The Ollama bridge talks to your local Ollama instance via the [ollama-python SDK](https://github.com/ollama/ollama-python). The aliases `ollama-sonnet`, `ollama-haiku`, and `ollama-gpt-oss` map to open-weight models that serve as rough local analogues for the Anthropic model tiers — they trade some capability for zero-cost, offline, private inference. Models are configured through environment variables in `.envrc`:
 
 ```sh
 export OLLAMA_HOST="http://127.0.0.1:11434"
