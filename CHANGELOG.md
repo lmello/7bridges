@@ -2,6 +2,71 @@
 
 <!-- version list -->
 
+## v1.1.0 (2026-05-16)
+
+### Bug Fixes
+
+- **ollama**: Graceful stream end on SDK parse errors
+  ([`6a7e5a4`](https://github.com/sdkks/7bridges/commit/6a7e5a46f90976e26f87e0bc8e5cbad9539dae47))
+
+- **ollama**: Use "300s" keep_alive default with time unit suffix
+  ([`cee4de2`](https://github.com/sdkks/7bridges/commit/cee4de2945c398816528d3ba36332d46f923c5e9))
+
+- **streaming**: Emit initial tool call args, prevent arg concatenation
+  ([`fe7ace1`](https://github.com/sdkks/7bridges/commit/fe7ace1d5d740a0b5df6c237aeea713e9ad602f0))
+
+### Chores
+
+- **ollama**: Bump haiku context window to 128k
+  ([`16bae14`](https://github.com/sdkks/7bridges/commit/16bae14c44a4fd1f43f8678f8ca75b314e4dc5e0))
+
+- **ollama**: Revert haiku context to 64k
+  ([`57d9e88`](https://github.com/sdkks/7bridges/commit/57d9e8850f396b9337857d0c867a0fe77747fb1f))
+
+- **ollama**: Switch haiku default to qwen3.5:9b
+  ([`eb4e23a`](https://github.com/sdkks/7bridges/commit/eb4e23afb82368ee697cbc11d4fe1b9edb5282d8))
+
+- **ollama**: Sync .envrc.example haiku context to 64k
+  ([`f64d135`](https://github.com/sdkks/7bridges/commit/f64d1353c62d6edd802b7c11fcdb9e92a3607abb))
+
+### Documentation
+
+- **ollama**: Add dense/MoE type and activated params to model table
+  ([`83be6fe`](https://github.com/sdkks/7bridges/commit/83be6fe71ec292129f67240f808fce0cd0b1daa9))
+
+- **ollama**: Add OLLAMA_MODELS.md with capabilities and quirks
+  ([`240223b`](https://github.com/sdkks/7bridges/commit/240223b2b170f191b6cfcf85e2a9c83e4fb764e4))
+
+- **readme**: Add Ollama bridge section with setup and usage
+  ([`ffd7628`](https://github.com/sdkks/7bridges/commit/ffd762858784dc0db0d015eec117b0c957131184))
+
+- **readme**: Explain ollama aliases as local analogues for Anthropic tiers
+  ([`6e2241c`](https://github.com/sdkks/7bridges/commit/6e2241c9cc1b190557672594ae0f42b8444b5665))
+
+- **readme**: Link to OLLAMA_MODELS.md for full capabilities
+  ([`cafa5d6`](https://github.com/sdkks/7bridges/commit/cafa5d63707a1856f18e04b14387bdd23ac4a70c))
+
+- **readme**: Mention Apple Silicon M2 Pro 32GB as test hardware
+  ([`2fafedf`](https://github.com/sdkks/7bridges/commit/2fafedff9f6fc34e339a083df297312a419e3a94))
+
+### Features
+
+- **ollama**: Add Ollama backend bridge using ollama-python SDK
+  ([`380b5c3`](https://github.com/sdkks/7bridges/commit/380b5c3f5d5ce32d905fcc3b1ef9537a4454fb47))
+
+- **ollama**: Add ollama-gemma (gemma4:26b, 64k), document gpt-oss write quirk
+  ([`bdcddc0`](https://github.com/sdkks/7bridges/commit/bdcddc084e7fe0b5f753e761afd08fcf92fc65e0))
+
+- **ollama**: Add ollama-nemo mapping to nemotron-3-nano:4b (64k ctx)
+  ([`97fc16d`](https://github.com/sdkks/7bridges/commit/97fc16d8c6b3431c6b1a3a5413a14faac81b5233))
+
+- **ollama**: Add ollama-sonnet/haiku aliases, debug logging, error hardening
+  ([`766c0c6`](https://github.com/sdkks/7bridges/commit/766c0c6fb55380cdb668021e06a5fa156ef702ee))
+
+- **ollama**: Replace ollama-nemo with ollama-gpt-oss (gpt-oss:20b, 64k)
+  ([`5d98bc8`](https://github.com/sdkks/7bridges/commit/5d98bc89010ff8002d8da7584ba63fcefbf93f90))
+
+
 ## v1.0.1 (2026-05-15)
 
 ### Bug Fixes
