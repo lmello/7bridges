@@ -36,23 +36,24 @@ class Settings:
     kimi_api_key: str = os.environ.get("KIMI_CODE_API_KEY", "")
     ollama_host: str = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
     ollama_keep_alive: str = os.environ.get("OLLAMA_KEEP_ALIVE", "300s")
-    ollama_sonnet_model: str = os.environ.get(
-        "OLLAMA_SONNET_MODEL", "qwen3.6:35b-a3b-coding-nvfp4"
-    )
+    ollama_sonnet_model: str = os.environ.get("OLLAMA_SONNET_MODEL", "qwen3.6:35b-a3b-coding-nvfp4")
     ollama_sonnet_ctx: int = int(os.environ.get("OLLAMA_SONNET_CONTEXT_WINDOW", "32768"))
-    ollama_haiku_model: str = os.environ.get(
-        "OLLAMA_HAIKU_MODEL", "qwen3.5:9b"
-    )
+    ollama_haiku_model: str = os.environ.get("OLLAMA_HAIKU_MODEL", "qwen3.5:9b")
     ollama_haiku_ctx: int = int(os.environ.get("OLLAMA_HAIKU_CONTEXT_WINDOW", "65536"))
-    ollama_gptoss_model: str = os.environ.get(
-        "OLLAMA_GPTOSS_MODEL", "gpt-oss:20b"
-    )
+    ollama_gptoss_model: str = os.environ.get("OLLAMA_GPTOSS_MODEL", "gpt-oss:20b")
     ollama_gptoss_ctx: int = int(os.environ.get("OLLAMA_GPTOSS_CONTEXT_WINDOW", "65536"))
-    ollama_gemma_model: str = os.environ.get(
-        "OLLAMA_GEMMA_MODEL", "gemma4:26b"
-    )
+    ollama_gemma_model: str = os.environ.get("OLLAMA_GEMMA_MODEL", "gemma4:26b")
     ollama_gemma_ctx: int = int(os.environ.get("OLLAMA_GEMMA_CONTEXT_WINDOW", "65536"))
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
+
+    # Vision fallback — experimental "See No Evil, Hear No Evil" feature
+    vision_fallback_enabled: bool = (
+        os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_ENABLED", "").lower() == "true"
+    )
+    vision_fallback_backend: str = os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_BACKEND", "")
+    vision_fallback_timeout: float = float(
+        os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT", "60")
+    )
 
     model_routes: dict[str, ModelRoute] = {
         "claude-sonnet-4-6": ModelRoute(

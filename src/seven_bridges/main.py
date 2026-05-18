@@ -26,6 +26,11 @@ from seven_bridges.models.anthropic import (
 )
 from seven_bridges.translation.request import request_has_images
 from seven_bridges.translation.stream import translate_openai_stream
+from seven_bridges.vision_fallback import (
+    build_soft_reject_response,
+    describe_images_in_request,
+    request_has_video,
+)
 
 
 def _estimate_tokens(obj: Any) -> int:
@@ -166,17 +171,32 @@ async def messages(
     request.state.resolved_backend_model = route.backend_model
 
     # Validate request against vendor capabilities
-    if request_has_images(anthropic_request) and not bridge.capabilities.supports_vision:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "type": "error",
-                "error": {
-                    "type": "invalid_request_error",
-                    "message": f"Model {route.alias} does not support image input",
-                },
-            },
-        )
+    has_images = request_has_images(anthropic_request)
+    has_video = request_has_video(anthropic_request)
+
+    if (has_images or has_video) and not bridge.capabilities.supports_vision:
+        # Vision fallback — experimental "See No Evil, Hear No Evil" feature
+        if settings.vision_fallback_enabled and has_images and settings.vision_fallback_backend:
+            # Parse backend spec: "kimi/kimi-k2-6" or "ollama/qwen3-vl:8b"
+            parts = settings.vision_fallback_backend.split("/", 1)
+            if len(parts) == 2:
+                vl_backend, vl_model = parts
+                anthropic_request = await describe_images_in_request(
+                    anthropic_request,
+                    backend=vl_backend,
+                    model=vl_model,
+                    timeout=settings.vision_fallback_timeout,
+                )
+            else:
+                # Malformed backend spec — fall through to soft reject
+                return JSONResponse(
+                    content=build_soft_reject_response(route.backend_model, has_video),
+                )
+        else:
+            # Soft reject: return 200 with guidance instead of 400 fatal error
+            return JSONResponse(
+                content=build_soft_reject_response(route.backend_model, has_video),
+            )
 
     if anthropic_request.stream:
         stream = bridge.chat_stream(anthropic_request)

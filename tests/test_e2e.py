@@ -202,7 +202,8 @@ def test_deepseek_tool_call_non_streaming():
 
 
 @respx.mock
-def test_deepseek_rejects_images():
+def test_deepseek_soft_rejects_images():
+    """Non-vision backends return 200 with guidance instead of fatal 400."""
     resp = client.post(
         "/v1/messages",
         headers=_auth_headers(),
@@ -229,10 +230,11 @@ def test_deepseek_rejects_images():
         },
     )
 
-    assert resp.status_code == 400
+    assert resp.status_code == 200
     data = resp.json()
-    assert data["type"] == "error"
-    assert "image" in data["error"]["message"].lower()
+    assert data["type"] == "message"
+    assert "vision_in" in data["content"][0]["text"].lower()
+    assert "ocr" in data["content"][0]["text"].lower()
 
 
 @respx.mock

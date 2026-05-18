@@ -11,4 +11,13 @@ export OLLAMA_GEMMA_MODEL=gemma4:26b
 export OLLAMA_GEMMA_CONTEXT_WINDOW=65536
 export OLLAMA_KEEP_ALIVE=300s
 export BRIDGE_API_KEY=ollama
+
+# Vision fallback — experimental "See No Evil, Hear No Evil" feature
+# Gives blind models (DeepSeek) eyes by routing images to a VL backend.
+# When disabled (default), image requests to non-vision backends get a
+# soft 200 rejection with guidance to use OCR/DOM methods.
+# export SEVEN_BRIDGES_VISION_FALLBACK_ENABLED=true
+# export SEVEN_BRIDGES_VISION_FALLBACK_BACKEND=kimi/kimi-k2-6
+# export SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT=60
+
 PATH_add .venv/bin
