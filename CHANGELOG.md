@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-05-18)
+
+### Bug Fixes
+
+- **ollama**: Add from err to chained exceptions (B904)
+  ([`69c5359`](https://github.com/sdkks/7bridges/commit/69c53594d94ebc114be34a1f122ca9d2bdb4cd12))
+
+- **ollama**: Resolve mypy type errors from ollama SDK type stubs
+  ([`62a8857`](https://github.com/sdkks/7bridges/commit/62a8857bde5a0e3923673fe89ecdf1dd38284e62))
+
+### Features
+
+- Vision fallback — give blind models eyes via VL backend
+  ([`09a9ebf`](https://github.com/sdkks/7bridges/commit/09a9ebfd476f08e27f851f248ec3e261d8434699))
+
+
 ## v1.2.0 (2026-05-16)
 
 ### Documentation
