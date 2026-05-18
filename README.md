@@ -60,7 +60,7 @@ Each backend is a "bridge":
 | Kimi | `api.kimi.com/coding/v1` | `kimi-for-coding` (K2.6) | ✅ | ✅ | ✅ | Live |
 | Ollama | `localhost:11434` | Configurable via env vars | ✅ | ✅ | ✅ | Live |
 
-> **Note on vision/image support:** DeepSeek v4 does not support the `image_in` tool yet. For debugging, development, or any image-related tasks, use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) — it maps to Kimi K2.6 which has full vision capabilities.
+> **Note on vision/image support:** DeepSeek v4 does not natively support image input. By default, image requests to DeepSeek receive a **soft 200 rejection** with guidance to use OCR/DOM fallbacks instead of a fatal 400 error. For full vision support, you can either use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) which maps to Kimi K2.6, or enable the experimental **vision fallback** feature that routes images to a separate VL backend (Kimi or Ollama) and feeds the text description back to the blind model. See [docs/VISION_FALLBACK.md](docs/VISION_FALLBACK.md).
 
 ### Model Aliases
 
