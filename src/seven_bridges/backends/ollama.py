@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
-from ollama import AsyncClient, ChatResponse, Message, Tool
+from ollama import AsyncClient, ChatResponse, Image, Message, Tool
 
 from seven_bridges.backends.base import Bridge, BridgeError, VendorCapabilities
 from seven_bridges.models.anthropic import (
@@ -70,8 +70,8 @@ def _anthropic_messages_to_ollama(
             messages.append(Message(role=msg.role, content=msg.content))
         else:
             text_parts: list[str] = []
-            images: list[str] = []
-            tool_calls: list[dict[str, Any]] = []
+            images: list[Image] = []
+            tool_calls: list[Message.ToolCall] = []
 
             for block in msg.content:
                 if isinstance(block, TextBlock):
@@ -81,13 +81,11 @@ def _anthropic_messages_to_ollama(
                     if isinstance(source, dict) and source.get("type") == "base64":
                         media_type = source.get("media_type", "image/jpeg")
                         data = source.get("data", "")
-                        images.append(f"data:{media_type};base64,{data}")
+                        images.append(Image(value=f"data:{media_type};base64,{data}"))
                 elif hasattr(block, "tool_use_id") and block.type == "tool_result":
                     tc = block.content
                     if isinstance(tc, list):
-                        result_text = "\n".join(
-                            b.text for b in tc if isinstance(b, TextBlock)
-                        )
+                        result_text = "\n".join(b.text for b in tc if isinstance(b, TextBlock))
                     else:
                         result_text = tc or ""
                     messages.append(
@@ -95,26 +93,22 @@ def _anthropic_messages_to_ollama(
                     )
                 elif hasattr(block, "id") and block.type == "tool_use":
                     tool_calls.append(
-                        {
-                            "function": {
-                                "name": block.name,
-                                "arguments": block.input,
-                            }
-                        }
+                        Message.ToolCall(
+                            function=Message.ToolCall.Function(
+                                name=block.name,
+                                arguments=block.input,
+                            )
+                        )
                     )
                 elif hasattr(block, "thinking") and block.type == "thinking":
                     pass
 
             if msg.role == "assistant" and tool_calls:
-                messages.append(
-                    Message(role="assistant", tool_calls=tool_calls)
-                )
+                messages.append(Message(role="assistant", tool_calls=tool_calls))
             elif text_parts or images:
                 content = "\n".join(text_parts) if text_parts else ""
                 if images:
-                    messages.append(
-                        Message(role=msg.role, content=content, images=images)
-                    )
+                    messages.append(Message(role=msg.role, content=content, images=images))
                 else:
                     messages.append(Message(role=msg.role, content=content))
 
@@ -128,8 +122,9 @@ def _anthropic_messages_to_ollama(
                     function=Tool.Function(
                         name=tool.name,
                         description=tool.description or "",
-                        parameters=Tool.Function.Parameters(
+                        parameters=Tool.Function.Parameters(  # type: ignore[call-arg]
                             type="object",
+                            defs=None,
                             properties=tool.input_schema.properties,
                             required=tool.input_schema.required,
                         ),
@@ -140,17 +135,13 @@ def _anthropic_messages_to_ollama(
     return messages, system_prompt, ollama_tools
 
 
-def _ollama_chat_to_anthropic(
-    response: ChatResponse, model_alias: str
-) -> MessagesResponse:
+def _ollama_chat_to_anthropic(response: ChatResponse, model_alias: str) -> MessagesResponse:
     """Convert an Ollama ChatResponse to Anthropic MessagesResponse."""
     msg = response.message
     content: list[Any] = []
 
     if msg.thinking:
-        content.append(
-            ThinkingBlock(thinking=msg.thinking, signature=_SIGNATURE_PLACEHOLDER)
-        )
+        content.append(ThinkingBlock(thinking=msg.thinking, signature=_SIGNATURE_PLACEHOLDER))
 
     if msg.content:
         content.append(TextBlock(text=msg.content))
@@ -160,14 +151,15 @@ def _ollama_chat_to_anthropic(
             args = tc.function.arguments
             if isinstance(args, str):
                 try:
-                    args = json.loads(args)
+                    parsed: dict[str, Any] = json.loads(args)
+                    args = parsed
                 except json.JSONDecodeError:
                     args = {}
             content.append(
                 ToolUseBlock(
                     id=f"call_{uuid.uuid4().hex[:8]}",
                     name=tc.function.name,
-                    input=args,
+                    input=args,  # type: ignore[arg-type]
                 )
             )
 
@@ -220,14 +212,13 @@ def _ollama_chunk_to_openai_chunk(
     if msg.tool_calls:
         tool_calls = []
         for i, tc in enumerate(msg.tool_calls):
-            args = tc.function.arguments
-            if not isinstance(args, str):
-                args = json.dumps(args)
+            raw_args = tc.function.arguments
+            args_str: str = raw_args if isinstance(raw_args, str) else json.dumps(raw_args)
             # Only emit the incremental suffix — the stream translator appends
             # partial_json fragments, so sending the full args each time would
             # produce concatenated duplicates.
             prev_len = prev_args_len.get(i, 0)
-            if len(args) > prev_len:
+            if len(args_str) > prev_len:
                 tool_calls.append(
                     {
                         "index": i,
@@ -235,12 +226,12 @@ def _ollama_chunk_to_openai_chunk(
                         "type": "function",
                         "function": {
                             "name": tc.function.name,
-                            "arguments": args[prev_len:],
+                            "arguments": args_str[prev_len:],
                         },
                     }
                 )
-                prev_args_len[i] = len(args)
-            elif prev_len == 0 and not args:
+                prev_args_len[i] = len(args_str)
+            elif prev_len == 0 and not args_str:
                 # First chunk with empty args (name-only): emit to create the block
                 tool_calls.append(
                     {
@@ -316,7 +307,8 @@ class OllamaBridge(Bridge):
             messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
         except Exception:
             _log_stderr(
-                "error", "request translation failed",
+                "error",
+                "request translation failed",
                 model_alias=self.model_alias,
                 trace=traceback.format_exc(),
             )
@@ -332,7 +324,8 @@ class OllamaBridge(Bridge):
         options = self._build_options(request)
 
         _log_stderr(
-            "info", "ollama request",
+            "info",
+            "ollama request",
             model_alias=self.model_alias,
             backend_model=self.backend_model,
             msg_count=len(messages),
@@ -352,7 +345,8 @@ class OllamaBridge(Bridge):
             )
         except Exception as e:
             _log_stderr(
-                "error", "ollama SDK call failed",
+                "error",
+                "ollama SDK call failed",
                 model_alias=self.model_alias,
                 backend_model=self.backend_model,
                 error=str(e),
@@ -368,7 +362,8 @@ class OllamaBridge(Bridge):
             result = _ollama_chat_to_anthropic(response, self.model_alias)
         except Exception:
             _log_stderr(
-                "error", "response translation failed",
+                "error",
+                "response translation failed",
                 model_alias=self.model_alias,
                 response_preview=str(response)[:1000],
                 trace=traceback.format_exc(),
@@ -380,7 +375,8 @@ class OllamaBridge(Bridge):
             )
 
         _log_stderr(
-            "info", "ollama response OK",
+            "info",
+            "ollama response OK",
             model_alias=self.model_alias,
             content_blocks=len(result.content),
             stop_reason=result.stop_reason,
@@ -389,14 +385,13 @@ class OllamaBridge(Bridge):
         )
         return result
 
-    async def chat_stream(
-        self, request: MessagesRequest
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
         try:
             messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
         except Exception:
             _log_stderr(
-                "error", "stream request translation failed",
+                "error",
+                "stream request translation failed",
                 model_alias=self.model_alias,
                 trace=traceback.format_exc(),
             )
@@ -413,7 +408,8 @@ class OllamaBridge(Bridge):
         chunk_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
         _log_stderr(
-            "info", "ollama stream request",
+            "info",
+            "ollama stream request",
             model_alias=self.model_alias,
             backend_model=self.backend_model,
             msg_count=len(messages),
@@ -433,7 +429,8 @@ class OllamaBridge(Bridge):
             )
         except Exception as e:
             _log_stderr(
-                "error", "ollama stream SDK call failed",
+                "error",
+                "ollama stream SDK call failed",
                 model_alias=self.model_alias,
                 backend_model=self.backend_model,
                 error=str(e),
@@ -451,13 +448,12 @@ class OllamaBridge(Bridge):
             async for chunk in stream:
                 chunk_count += 1
                 try:
-                    oai_chunk = _ollama_chunk_to_openai_chunk(
-                        chunk, chunk_id, prev_args_len
-                    )
+                    oai_chunk = _ollama_chunk_to_openai_chunk(chunk, chunk_id, prev_args_len)
                     yield {"type": "raw", "data": json.dumps(oai_chunk)}
                 except Exception:
                     _log_stderr(
-                        "error", "chunk translation failed",
+                        "error",
+                        "chunk translation failed",
                         model_alias=self.model_alias,
                         chunk_index=chunk_count,
                         chunk_preview=str(chunk)[:500],
@@ -465,7 +461,8 @@ class OllamaBridge(Bridge):
                     )
         except Exception as e:
             _log_stderr(
-                "error", "ollama stream parse error",
+                "error",
+                "ollama stream parse error",
                 model_alias=self.model_alias,
                 chunk_count=chunk_count,
                 error=str(e),
@@ -489,10 +486,11 @@ class OllamaBridge(Bridge):
             }
 
         _log_stderr(
-            "info", "ollama stream done",
+            "info",
+            "ollama stream done",
             model_alias=self.model_alias,
             chunk_count=chunk_count,
         )
 
-    async def close(self):
-        await self._client.close()
+    async def close(self) -> None:
+        await self._client.close()  # type: ignore[no-untyped-call]
