@@ -305,7 +305,7 @@ class OllamaBridge(Bridge):
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         try:
             messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
-        except Exception:
+        except Exception as err:
             _log_stderr(
                 "error",
                 "request translation failed",
@@ -316,7 +316,7 @@ class OllamaBridge(Bridge):
                 message="Failed to translate request for Ollama",
                 status_code=502,
                 error_type="api_error",
-            )
+            ) from err
 
         if system_prompt:
             messages.insert(0, Message(role="system", content=system_prompt))
@@ -360,7 +360,7 @@ class OllamaBridge(Bridge):
 
         try:
             result = _ollama_chat_to_anthropic(response, self.model_alias)
-        except Exception:
+        except Exception as err:
             _log_stderr(
                 "error",
                 "response translation failed",
@@ -372,7 +372,7 @@ class OllamaBridge(Bridge):
                 message="Failed to translate Ollama response",
                 status_code=502,
                 error_type="api_error",
-            )
+            ) from err
 
         _log_stderr(
             "info",
@@ -388,7 +388,7 @@ class OllamaBridge(Bridge):
     async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
         try:
             messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
-        except Exception:
+        except Exception as err:
             _log_stderr(
                 "error",
                 "stream request translation failed",
@@ -399,7 +399,7 @@ class OllamaBridge(Bridge):
                 message="Failed to translate stream request for Ollama",
                 status_code=502,
                 error_type="api_error",
-            )
+            ) from err
 
         if system_prompt:
             messages.insert(0, Message(role="system", content=system_prompt))
