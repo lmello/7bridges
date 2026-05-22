@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-05-22)
+
+### Bug Fixes
+
+- **stream**: Handle upstream errors mid-stream with SSE error event
+  ([`3c14f27`](https://github.com/sdkks/7bridges/commit/3c14f276e5864d8653dd8e3729c4768a95ba5ef4))
+
+### Documentation
+
+- Expand vision fallback docs with separate API call explanation
+  ([`9f94ccd`](https://github.com/sdkks/7bridges/commit/9f94ccdde8111622887bb9038bb1456af335d518))
+
+### Features
+
+- **debug**: Log outgoing requests and wire up DeepSeek thinking/effort passthrough
+  ([`591a838`](https://github.com/sdkks/7bridges/commit/591a8380fa8cee6f51324b7063dbbb68b15d4464))
+
+
 ## v1.3.0 (2026-05-18)
 
 ### Bug Fixes
