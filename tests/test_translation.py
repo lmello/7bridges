@@ -545,3 +545,122 @@ def test_anthropic_to_openai_tool_result_error_flag():
 
     assert openai_req.messages[1]["role"] == "tool"
     assert openai_req.messages[1]["content"] == "[Error] Permission denied"
+
+
+# ---------------------------------------------------------------------------
+# DeepSeek thinking/effort passthrough tests
+# ---------------------------------------------------------------------------
+
+
+def test_deepseek_thinking_enabled():
+    """Anthropic thinking:enabled → DeepSeek thinking: {type: enabled}."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "enabled"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.thinking == {"type": "enabled"}
+    assert result.reasoning_effort is None
+
+
+def test_deepseek_thinking_adaptive():
+    """Anthropic thinking:adaptive → DeepSeek thinking: {type: enabled}."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "adaptive"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.thinking == {"type": "enabled"}
+
+
+def test_deepseek_thinking_disabled():
+    """Anthropic thinking:disabled → DeepSeek thinking: {type: disabled}."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "disabled"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.thinking == {"type": "disabled"}
+
+
+def test_deepseek_no_thinking_param():
+    """No thinking param → nothing set (let DeepSeek default)."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.thinking is None
+    assert result.reasoning_effort is None
+
+
+def test_deepseek_effort_passthrough():
+    """output_config.effort is passed through as reasoning_effort."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        output_config={"effort": "max"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.reasoning_effort == "max"
+    assert result.thinking is None
+
+
+def test_deepseek_thinking_and_effort_combined():
+    """Both thinking:adaptive + effort:max produce both fields."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "max"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.thinking == {"type": "enabled"}
+    assert result.reasoning_effort == "max"
+
+
+def test_deepseek_effort_low_passthrough():
+    """low effort is passed through; DeepSeek aliases it server-side."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        output_config={"effort": "low"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.reasoning_effort == "low"
+
+
+def test_kimi_ignores_thinking():
+    """Kimi backend never receives thinking or reasoning_effort fields."""
+    req = MessagesRequest(
+        model="claude-opus-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "enabled"},
+        output_config={"effort": "max"},
+    )
+    result = anthropic_to_openai(req, "kimi")
+    assert result.thinking is None
+    assert result.reasoning_effort is None
+
+
+def test_deepseek_thinking_unknown_type_ignored():
+    """Unknown thinking type is not forwarded."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "unknown_value"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.thinking is None

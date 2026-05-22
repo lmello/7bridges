@@ -1,8 +1,10 @@
 """Abstract base class for backend bridges."""
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from seven_bridges.models.anthropic import MessagesRequest, MessagesResponse
@@ -52,6 +54,26 @@ class Bridge(ABC):
         self.api_base = api_base or self.default_api_base
         self.model_alias = model_alias
         self.backend_model = backend_model
+        self._debug_log_path: str | None = None
+
+    def _log_outgoing(self, outgoing: dict[str, Any]) -> None:
+        """Log the translated outgoing request to the debug JSONL file."""
+        if not self._debug_log_path:
+            return
+        entry = {
+            "type": "outgoing_request",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "backend": self.name,
+            "model": outgoing.get("model"),
+            "stream": outgoing.get("stream"),
+            "thinking": outgoing.get("thinking"),
+            "reasoning_effort": outgoing.get("reasoning_effort"),
+            "max_tokens": outgoing.get("max_tokens"),
+            "tool_count": len(outgoing.get("tools", [])),
+            "message_count": len(outgoing.get("messages", [])),
+        }
+        with open(self._debug_log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
 
     @abstractmethod
     async def chat(self, request: MessagesRequest) -> MessagesResponse:

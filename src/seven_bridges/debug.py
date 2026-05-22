@@ -81,6 +81,8 @@ class DebugMiddleware(BaseHTTPMiddleware):
                     "message_count": msg_count,
                     "stream": req_body.get("stream"),
                     "max_tokens": req_body.get("max_tokens"),
+                    "thinking": req_body.get("thinking"),
+                    "output_config": req_body.get("output_config"),
                     "last_message_preview": str(req_body.get("messages", [])[-1])[:500]
                     if msg_count > 0
                     else None,
@@ -105,6 +107,9 @@ class DebugMiddleware(BaseHTTPMiddleware):
         log_path = DEBUG_DIR / f"{session_id}.jsonl"
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(request_entry, ensure_ascii=False, default=str) + "\n")
+
+        # Store log path so backends can log outgoing requests
+        request.state.debug_log_path = str(log_path)
 
         # Call handler
         response = await call_next(request)

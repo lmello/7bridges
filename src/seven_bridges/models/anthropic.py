@@ -108,6 +108,8 @@ class MessagesRequest(BaseModel):
     tool_choice: Literal["auto", "any", "none"] | dict[str, Any] | None = None
     tools: list[Tool] | None = None
     thinking: dict[str, Any] | None = None  # Anthropic-native; stripped by bridges
+    # e.g. {"effort": "high"}; passed through to DeepSeek
+    output_config: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------

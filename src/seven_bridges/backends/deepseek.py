@@ -76,6 +76,11 @@ class DeepSeekBridge(Bridge):
 
         openai_request.stream_options = StreamOptions(include_usage=True)
 
+        # Log outgoing request for debug traceability
+        if self._debug_log_path:
+            outgoing = openai_request.model_dump(exclude_none=True)
+            self._log_outgoing(outgoing)
+
         async with (
             httpx.AsyncClient() as client,
             client.stream(

@@ -6,6 +6,7 @@ import respx
 from fastapi.testclient import TestClient
 from httpx import Response
 
+from seven_bridges.config import settings
 from seven_bridges.main import app
 
 client = TestClient(app)
@@ -202,8 +203,10 @@ def test_deepseek_tool_call_non_streaming():
 
 
 @respx.mock
-def test_deepseek_soft_rejects_images():
+def test_deepseek_soft_rejects_images(monkeypatch):
     """Non-vision backends return 200 with guidance instead of fatal 400."""
+    # Disable vision fallback to always test the soft-reject path
+    monkeypatch.setattr(settings, "vision_fallback_enabled", False)
     resp = client.post(
         "/v1/messages",
         headers=_auth_headers(),

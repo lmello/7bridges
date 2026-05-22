@@ -198,6 +198,9 @@ async def messages(
                 content=build_soft_reject_response(route.backend_model, has_video),
             )
 
+    # Pass debug log path to bridge for outgoing request logging
+    bridge._debug_log_path = getattr(request.state, "debug_log_path", None)
+
     if anthropic_request.stream:
         stream = bridge.chat_stream(anthropic_request)
         translated = translate_openai_stream(stream, route.alias)

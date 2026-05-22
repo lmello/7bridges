@@ -275,6 +275,24 @@ def anthropic_to_openai(
     # Convert conversation messages
     messages.extend(_convert_messages(request.messages))
 
+    # DeepSeek thinking/effort passthrough.
+    # Anthropic thinking types: "enabled", "adaptive", "disabled".
+    # DeepSeek only understands "enabled"/"disabled", so "adaptive" → "enabled".
+    # output_config.effort is passed through as reasoning_effort — DeepSeek
+    # aliases low/medium → high and xhigh → max server-side.
+    deepseek_extra: dict[str, Any] = {}
+    if backend_name == "deepseek":
+        if request.thinking:
+            thinking_type = request.thinking.get("type")
+            if thinking_type in ("enabled", "adaptive"):
+                deepseek_extra["thinking"] = {"type": "enabled"}
+            elif thinking_type == "disabled":
+                deepseek_extra["thinking"] = {"type": "disabled"}
+        if request.output_config:
+            effort = request.output_config.get("effort")
+            if effort:
+                deepseek_extra["reasoning_effort"] = effort
+
     # Build OpenAI request
     return ChatCompletionRequest(
         model=request.model,
@@ -289,4 +307,6 @@ def anthropic_to_openai(
             "Literal['none', 'auto', 'required'] | dict[str, Any] | None",
             _convert_tool_choice(request.tool_choice),
         ),
+        reasoning_effort=deepseek_extra.get("reasoning_effort"),
+        thinking=deepseek_extra.get("thinking"),
     )
