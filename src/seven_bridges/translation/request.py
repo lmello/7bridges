@@ -321,25 +321,51 @@ def anthropic_to_openai(
             siliconflow_extra["thinking_budget"] = 16384
 
     # Fireworks AI thinking passthrough.
-    # Fireworks supports reasoning_effort (string) or an Anthropic-compatible
-    # thinking object with budget_tokens. We pass Anthropic thinking directly
-    # since Fireworks understands the same schema.
+    # Kimi K2.6 accepts the Anthropic-compatible thinking object with
+    # budget_tokens (number). MiniMax M2.7 only accepts reasoning_effort
+    # (string: low/medium/high) — it rejects the thinking object entirely.
     fireworks_extra: dict[str, Any] = {}
     if backend_name == "fireworks":
+        is_minimax = "minimax" in request.model.lower()
         if request.thinking:
             thinking_type = request.thinking.get("type")
             if thinking_type in ("enabled", "adaptive"):
-                fw_thinking: dict[str, Any] = {"type": "enabled"}
-                budget = request.thinking.get("budget_tokens")
-                if budget:
-                    fw_thinking["budget_tokens"] = budget
-                fireworks_extra["thinking"] = fw_thinking
+                if is_minimax:
+                    # MiniMax only wants reasoning_effort string — convert
+                    # budget_tokens to an effort level, or use output_config.
+                    effort = None
+                    if request.output_config:
+                        effort = request.output_config.get("effort")
+                    if not effort:
+                        budget = request.thinking.get("budget_tokens", 0) or 0
+                        if budget <= 4096:
+                            effort = "low"
+                        elif budget <= 8192:
+                            effort = "medium"
+                        else:
+                            effort = "high"
+                    fireworks_extra["reasoning_effort"] = (
+                        effort if effort in ("low", "medium", "high") else "high"
+                    )
+                else:
+                    fw_thinking: dict[str, Any] = {"type": "enabled"}
+                    budget = request.thinking.get("budget_tokens")
+                    if budget:
+                        fw_thinking["budget_tokens"] = budget
+                    fireworks_extra["thinking"] = fw_thinking
             elif thinking_type == "disabled":
-                fireworks_extra["thinking"] = {"type": "disabled"}
-        if request.output_config and "thinking" not in fireworks_extra:
+                if is_minimax:
+                    pass  # MiniMax: no thinking object to send; just omit
+                else:
+                    fireworks_extra["thinking"] = {"type": "disabled"}
+        elif request.output_config:
             effort = request.output_config.get("effort")
             if effort:
-                fireworks_extra["reasoning_effort"] = effort
+                fireworks_extra["reasoning_effort"] = (
+                    (effort if effort in ("low", "medium", "high") else "high")
+                    if is_minimax
+                    else effort
+                )
 
     # Build OpenAI request — Fireworks thinking takes priority over DeepSeek
     # since they both use the "thinking" field but with different schemas.

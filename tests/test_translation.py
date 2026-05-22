@@ -693,9 +693,9 @@ def test_fireworks_thinking_with_budget():
 
 
 def test_fireworks_thinking_disabled():
-    """Fireworks thinking=disabled sends {type: disabled}."""
+    """Fireworks thinking=disabled sends {type: disabled} for Kimi."""
     req = MessagesRequest(
-        model="fireworks-minimax-m2p7",
+        model="fireworks-kimi-k2p6",
         messages=[Message(role="user", content="Hello")],
         max_tokens=100,
         thinking={"type": "disabled"},
@@ -715,6 +715,84 @@ def test_fireworks_effort_as_reasoning_effort():
     result = anthropic_to_openai(req, "fireworks")
     assert result.reasoning_effort == "high"
     assert result.thinking is None
+
+
+def test_fireworks_clamps_effort_xhigh_and_max_to_high():
+    """Fireworks MiniMax M2 only accepts low/medium/high; clamp xhigh/max."""
+    for effort_in, expected in [("xhigh", "high"), ("max", "high")]:
+        req = MessagesRequest(
+            model="fireworks-minimax-m2p7",
+            messages=[Message(role="user", content="Hello")],
+            max_tokens=100,
+            output_config={"effort": effort_in},
+        )
+        result = anthropic_to_openai(req, "fireworks")
+        assert result.reasoning_effort == expected, f"{effort_in} → {expected}"
+        assert result.thinking is None
+
+
+def test_minimax_budget_converts_to_effort():
+    """MiniMax M2 maps budget_tokens to reasoning_effort string."""
+    cases = [
+        (2048, "low"),
+        (4096, "low"),
+        (5000, "medium"),
+        (8192, "medium"),
+        (12000, "high"),
+        (16384, "high"),
+        (32000, "high"),
+    ]
+    for budget, expected_effort in cases:
+        req = MessagesRequest(
+            model="fireworks-minimax-m2p7",
+            messages=[Message(role="user", content="Hello")],
+            max_tokens=100,
+            thinking={"type": "enabled", "budget_tokens": budget},
+        )
+        result = anthropic_to_openai(req, "fireworks")
+        assert result.reasoning_effort == expected_effort, (
+            f"budget {budget} → {expected_effort}, got {result.reasoning_effort}"
+        )
+        assert result.thinking is None
+
+
+def test_minimax_prefers_output_config_over_budget():
+    """MiniMax M2 prefers output_config.effort over budget_tokens mapping."""
+    req = MessagesRequest(
+        model="fireworks-minimax-m2p7",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "enabled", "budget_tokens": 32000},
+        output_config={"effort": "low"},
+    )
+    result = anthropic_to_openai(req, "fireworks")
+    assert result.reasoning_effort == "low"
+    assert result.thinking is None
+
+
+def test_minimax_thinking_disabled_sends_nothing():
+    """MiniMax M2 with disabled thinking sends no thinking or effort."""
+    req = MessagesRequest(
+        model="fireworks-minimax-m2p7",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "disabled"},
+    )
+    result = anthropic_to_openai(req, "fireworks")
+    assert result.thinking is None
+    assert result.reasoning_effort is None
+
+
+def test_minimax_no_thinking_no_output_config_sends_nothing():
+    """MiniMax M2 with no thinking and no output_config sends nothing."""
+    req = MessagesRequest(
+        model="fireworks-minimax-m2p7",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+    )
+    result = anthropic_to_openai(req, "fireworks")
+    assert result.thinking is None
+    assert result.reasoning_effort is None
 
 
 def test_fireworks_ignores_siliconflow_params():

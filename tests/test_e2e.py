@@ -1811,7 +1811,7 @@ def test_fireworks_thinking_disabled():
                 "id": "chatcmpl-fw-8",
                 "object": "chat.completion",
                 "created": 1234567890,
-                "model": "accounts/fireworks/models/minimax-m2p7",
+                "model": "accounts/fireworks/models/kimi-k2p6",
                 "choices": [
                     {
                         "index": 0,
@@ -1828,7 +1828,7 @@ def test_fireworks_thinking_disabled():
         "/v1/messages",
         headers=_auth_headers(),
         json={
-            "model": "fireworks-minimax-m2p7",
+            "model": "fireworks-kimi-k2p6",
             "messages": [{"role": "user", "content": "Quick answer"}],
             "max_tokens": 100,
             "thinking": {"type": "disabled"},
