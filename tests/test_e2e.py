@@ -1757,7 +1757,7 @@ def test_fireworks_upstream_error():
 
 @respx.mock
 def test_fireworks_thinking_passthrough():
-    """Verify enable_thinking + thinking_budget are sent to Fireworks."""
+    """Verify Anthropic-compatible thinking object is sent to Fireworks."""
     route = respx.post(_FW_BASE).mock(
         return_value=Response(
             200,
@@ -1790,15 +1790,15 @@ def test_fireworks_thinking_passthrough():
             "messages": [{"role": "user", "content": "Think hard"}],
             "max_tokens": 100,
             "thinking": {"type": "enabled"},
-            "output_config": {"effort": "xhigh"},
             "stream": False,
         },
     )
 
     assert resp.status_code == 200
     upstream = json.loads(route.calls[0].request.content)
-    assert upstream["enable_thinking"] is True
-    assert upstream["thinking_budget"] == 24576
+    assert upstream["thinking"] == {"type": "enabled"}
+    assert "enable_thinking" not in upstream
+    assert "thinking_budget" not in upstream
 
 
 @respx.mock
@@ -1838,7 +1838,8 @@ def test_fireworks_thinking_disabled():
 
     assert resp.status_code == 200
     upstream = json.loads(route.calls[0].request.content)
-    assert upstream["enable_thinking"] is False
+    assert upstream["thinking"] == {"type": "disabled"}
+    assert "enable_thinking" not in upstream
 
 
 @respx.mock

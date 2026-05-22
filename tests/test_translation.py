@@ -667,7 +667,7 @@ def test_deepseek_thinking_unknown_type_ignored():
 
 
 def test_fireworks_thinking_enabled():
-    """Fireworks uses enable_thinking + thinking_budget like SiliconFlow."""
+    """Fireworks uses Anthropic-compatible thinking object with budget_tokens."""
     req = MessagesRequest(
         model="fireworks-kimi-k2p6",
         messages=[Message(role="user", content="Hello")],
@@ -675,26 +675,25 @@ def test_fireworks_thinking_enabled():
         thinking={"type": "enabled"},
     )
     result = anthropic_to_openai(req, "fireworks")
-    assert result.enable_thinking is True
-    assert result.thinking_budget == 16384  # default when no effort
+    assert result.thinking == {"type": "enabled"}
+    assert result.enable_thinking is None
+    assert result.thinking_budget is None
 
 
-def test_fireworks_thinking_with_effort():
-    """Fireworks thinking + effort maps to thinking_budget."""
+def test_fireworks_thinking_with_budget():
+    """Fireworks passes budget_tokens through in thinking object."""
     req = MessagesRequest(
         model="fireworks-kimi-k2p6",
         messages=[Message(role="user", content="Hello")],
         max_tokens=100,
-        thinking={"type": "adaptive"},
-        output_config={"effort": "max"},
+        thinking={"type": "enabled", "budget_tokens": 8192},
     )
     result = anthropic_to_openai(req, "fireworks")
-    assert result.enable_thinking is True
-    assert result.thinking_budget == 32768
+    assert result.thinking == {"type": "enabled", "budget_tokens": 8192}
 
 
 def test_fireworks_thinking_disabled():
-    """Fireworks thinking=disabled sets enable_thinking=False."""
+    """Fireworks thinking=disabled sends {type: disabled}."""
     req = MessagesRequest(
         model="fireworks-minimax-m2p7",
         messages=[Message(role="user", content="Hello")],
@@ -702,19 +701,30 @@ def test_fireworks_thinking_disabled():
         thinking={"type": "disabled"},
     )
     result = anthropic_to_openai(req, "fireworks")
-    assert result.enable_thinking is False
-    assert result.thinking_budget is None
+    assert result.thinking == {"type": "disabled"}
 
 
-def test_fireworks_ignores_deepseek_params():
-    """Fireworks backend never receives DeepSeek-style thinking/effort."""
+def test_fireworks_effort_as_reasoning_effort():
+    """Fireworks uses reasoning_effort when no thinking type is set."""
+    req = MessagesRequest(
+        model="fireworks-kimi-k2p6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        output_config={"effort": "high"},
+    )
+    result = anthropic_to_openai(req, "fireworks")
+    assert result.reasoning_effort == "high"
+    assert result.thinking is None
+
+
+def test_fireworks_ignores_siliconflow_params():
+    """Fireworks backend never receives enable_thinking or thinking_budget."""
     req = MessagesRequest(
         model="fireworks-kimi-k2p6",
         messages=[Message(role="user", content="Hello")],
         max_tokens=100,
         thinking={"type": "enabled"},
-        output_config={"effort": "high"},
     )
     result = anthropic_to_openai(req, "fireworks")
-    assert result.thinking is None
-    assert result.reasoning_effort is None
+    assert result.enable_thinking is None
+    assert result.thinking_budget is None
