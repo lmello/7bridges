@@ -44,6 +44,7 @@ class Settings:
     ollama_gptoss_ctx: int = int(os.environ.get("OLLAMA_GPTOSS_CONTEXT_WINDOW", "65536"))
     ollama_gemma_model: str = os.environ.get("OLLAMA_GEMMA_MODEL", "gemma4:26b")
     ollama_gemma_ctx: int = int(os.environ.get("OLLAMA_GEMMA_CONTEXT_WINDOW", "65536"))
+    siliconflow_api_key: str = os.environ.get("SILICONFLOW_API_KEY", "")
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     # Vision fallback — experimental "See No Evil, Hear No Evil" feature
@@ -148,6 +149,14 @@ class Settings:
             display_name=f"Ollama Gemma ({ollama_gemma_model})",
             context_window=ollama_gemma_ctx,
             max_output_tokens=8192,
+        ),
+        "siliconflow-minimax-m2.5": ModelRoute(
+            alias="siliconflow-minimax-m2.5",
+            bridge="siliconflow",
+            backend_model="MiniMaxAI/MiniMax-M2.5",
+            display_name="MiniMax M2.5 (SiliconFlow)",
+            context_window=262_144,
+            max_output_tokens=32768,
         ),
     }
 

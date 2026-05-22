@@ -80,6 +80,8 @@ class ChatCompletionRequest(BaseModel):
     stream_options: StreamOptions | None = None
     reasoning_effort: str | None = None
     thinking: dict[str, Any] | None = None
+    enable_thinking: bool | None = None
+    thinking_budget: int | None = None
 
 
 # ---------------------------------------------------------------------------

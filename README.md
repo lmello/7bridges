@@ -6,7 +6,7 @@ An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy th
 
 # What's new?
 
-Added support for Ollama. Some working examples are further down.
+Added support for SiliconFlow (MiniMax M2.5) and Ollama. Some working examples are further down.
 
 
 https://github.com/user-attachments/assets/8e6fa365-d528-4307-ad36-61fa040a4cc2
@@ -59,6 +59,7 @@ Each backend is a "bridge":
 | DeepSeek | `api.deepseek.com` | `deepseek-v4-pro` (Sonnet), `deepseek-v4-flash` (Haiku) | ❌ | ✅ | ✅ | Live |
 | Kimi | `api.kimi.com/coding/v1` | `kimi-for-coding` (K2.6) | ✅ | ✅ | ✅ | Live |
 | Ollama | `localhost:11434` | Configurable via env vars | ✅ | ✅ | ✅ | Live |
+| SiliconFlow | `api.siliconflow.com/v1` | `MiniMaxAI/MiniMax-M2.5` | ❌ | ✅ | ✅ | Live |
 
 > **Note on vision/image support:** DeepSeek v4 does not natively support image input. By default, image requests to DeepSeek receive a **soft 200 rejection** with guidance to use OCR/DOM fallbacks instead of a fatal 400 error. For full vision support, you can either use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) which maps to Kimi K2.6, or enable the experimental **vision fallback** feature that routes images to a separate VL backend (Kimi or Ollama) and feeds the text description back to the blind model. See [docs/VISION_FALLBACK.md](docs/VISION_FALLBACK.md).
 
@@ -74,6 +75,7 @@ Each backend is a "bridge":
 | `ollama-haiku` | Ollama | `qwen3.5:9b` | 65,536 | 8,192 |
 | `ollama-gpt-oss` | Ollama | `gpt-oss:20b` | 65,536 | 8,192 |
 | `ollama-gemma` | Ollama | `gemma4:26b` | 65,536 | 8,192 |
+| `siliconflow-minimax-m2.5` | SiliconFlow | `MiniMaxAI/MiniMax-M2.5` | 262,144 | 32,768 |
 
 ## Ollama Setup
 
@@ -131,6 +133,7 @@ Set your upstream API keys:
 ```sh
 export DEEPSEEK_API_KEY="sk-..."
 export KIMI_CODE_API_KEY="sk-..."
+export SILICONFLOW_API_KEY="sk-..."
 export BRIDGE_API_KEY="ollama"  # or whatever you want Claude Code to send
 ```
 
@@ -226,7 +229,8 @@ curl -X POST http://localhost:4001/v1/messages/count_tokens \
 │   │   ├── base.py          # Abstract Bridge base class + capabilities
 │   │   ├── deepseek.py      # DeepSeek bridge
 │   │   ├── kimi.py          # Kimi bridge
-│   │   └── ollama.py        # Ollama bridge
+│   │   ├── ollama.py        # Ollama bridge
+│   │   └── siliconflow.py   # SiliconFlow bridge
 │   └── translation/
 │       ├── request.py       # Anthropic → OpenAI request translation
 │       ├── response.py      # OpenAI → Anthropic response translation

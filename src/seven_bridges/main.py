@@ -17,6 +17,7 @@ from seven_bridges.backends.base import Bridge, BridgeError
 from seven_bridges.backends.deepseek import DeepSeekBridge
 from seven_bridges.backends.kimi import KimiBridge
 from seven_bridges.backends.ollama import OllamaBridge
+from seven_bridges.backends.siliconflow import SiliconFlowBridge
 from seven_bridges.config import ModelRoute, settings
 from seven_bridges.debug import DebugMiddleware
 from seven_bridges.models.anthropic import (
@@ -118,6 +119,14 @@ def _get_bridge(route: ModelRoute) -> Bridge:
             keep_alive=settings.ollama_keep_alive,
             **kwargs,
         )
+    elif route.bridge == "siliconflow":
+        if not settings.siliconflow_api_key:
+            raise BridgeError(
+                "SILICONFLOW_API_KEY not configured",
+                status_code=503,
+                error_type="configuration_error",
+            )
+        return SiliconFlowBridge(api_key=settings.siliconflow_api_key, **kwargs)
     else:
         raise BridgeError(
             f"Unknown bridge: {route.bridge}",
