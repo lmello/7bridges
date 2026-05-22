@@ -68,6 +68,8 @@ class Bridge(ABC):
             "stream": outgoing.get("stream"),
             "thinking": outgoing.get("thinking"),
             "reasoning_effort": outgoing.get("reasoning_effort"),
+            "enable_thinking": outgoing.get("enable_thinking"),
+            "thinking_budget": outgoing.get("thinking_budget"),
             "max_tokens": outgoing.get("max_tokens"),
             "tool_count": len(outgoing.get("tools", [])),
             "message_count": len(outgoing.get("messages", [])),
