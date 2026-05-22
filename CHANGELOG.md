@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-05-22)
+
+### Features
+
+- **siliconflow**: Add Kimi K2.6 and GLM 5.1 models with accurate specs
+  ([`68568cd`](https://github.com/sdkks/7bridges/commit/68568cdb649db672e60e5d5f314beeb7619c3369))
+
+- **siliconflow**: Add SiliconFlow bridge with MiniMax-M2.5 support
+  ([`561d511`](https://github.com/sdkks/7bridges/commit/561d511a7e18979241ffc7e2dea89fe3b05f32c1))
+
+
 ## v1.4.0 (2026-05-22)
 
 ### Bug Fixes
