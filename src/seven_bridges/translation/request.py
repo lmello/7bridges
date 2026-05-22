@@ -293,18 +293,18 @@ def anthropic_to_openai(
             if effort:
                 deepseek_extra["reasoning_effort"] = effort
 
-    # SiliconFlow thinking passthrough.
-    # SiliconFlow uses enable_thinking (bool) + thinking_budget (int).
+    # SiliconFlow / Fireworks thinking passthrough.
+    # Both use enable_thinking (bool) + thinking_budget (int).
     # Map Anthropic effort tiers to token budgets:
     #   low→4096  medium→8192  high→16384  xhigh→24576  max→32768
-    siliconflow_extra: dict[str, Any] = {}
-    if backend_name == "siliconflow":
+    sf_fw_extra: dict[str, Any] = {}
+    if backend_name in ("siliconflow", "fireworks"):
         if request.thinking:
             thinking_type = request.thinking.get("type")
             if thinking_type in ("enabled", "adaptive"):
-                siliconflow_extra["enable_thinking"] = True
+                sf_fw_extra["enable_thinking"] = True
             elif thinking_type == "disabled":
-                siliconflow_extra["enable_thinking"] = False
+                sf_fw_extra["enable_thinking"] = False
         if request.output_config:
             effort = request.output_config.get("effort")
             if effort:
@@ -315,10 +315,10 @@ def anthropic_to_openai(
                     "xhigh": 24576,
                     "max": 32768,
                 }
-                siliconflow_extra["thinking_budget"] = budget_map.get(effort, 16384)
-        elif siliconflow_extra.get("enable_thinking") is not False:
+                sf_fw_extra["thinking_budget"] = budget_map.get(effort, 16384)
+        elif sf_fw_extra.get("enable_thinking") is not False:
             # Thinking enabled but no effort specified — generous default
-            siliconflow_extra["thinking_budget"] = 16384
+            sf_fw_extra["thinking_budget"] = 16384
 
     # Build OpenAI request
     return ChatCompletionRequest(
@@ -336,6 +336,6 @@ def anthropic_to_openai(
         ),
         reasoning_effort=deepseek_extra.get("reasoning_effort"),
         thinking=deepseek_extra.get("thinking"),
-        enable_thinking=siliconflow_extra.get("enable_thinking"),
-        thinking_budget=siliconflow_extra.get("thinking_budget"),
+        enable_thinking=sf_fw_extra.get("enable_thinking"),
+        thinking_budget=sf_fw_extra.get("thinking_budget"),
     )

@@ -45,6 +45,7 @@ class Settings:
     ollama_gemma_model: str = os.environ.get("OLLAMA_GEMMA_MODEL", "gemma4:26b")
     ollama_gemma_ctx: int = int(os.environ.get("OLLAMA_GEMMA_CONTEXT_WINDOW", "65536"))
     siliconflow_api_key: str = os.environ.get("SILICONFLOW_API_KEY", "")
+    fireworks_api_key: str = os.environ.get("FIREWORKSAI_API_KEY", "")
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     # Vision fallback — experimental "See No Evil, Hear No Evil" feature
@@ -172,6 +173,22 @@ class Settings:
             backend_model="zai-org/GLM-5.1",
             display_name="GLM 5.1 (SiliconFlow)",
             context_window=200_000,
+            max_output_tokens=131_072,
+        ),
+        "fireworks-kimi-k2p6": ModelRoute(
+            alias="fireworks-kimi-k2p6",
+            bridge="fireworks",
+            backend_model="accounts/fireworks/models/kimi-k2p6",
+            display_name="Kimi K2.6 (Fireworks AI)",
+            context_window=262_144,
+            max_output_tokens=262_144,
+        ),
+        "fireworks-minimax-m2p7": ModelRoute(
+            alias="fireworks-minimax-m2p7",
+            bridge="fireworks",
+            backend_model="accounts/fireworks/models/minimax-m2p7",
+            display_name="MiniMax M2.7 (Fireworks AI)",
+            context_window=204_800,
             max_output_tokens=131_072,
         ),
     }

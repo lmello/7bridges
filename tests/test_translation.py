@@ -664,3 +664,57 @@ def test_deepseek_thinking_unknown_type_ignored():
     )
     result = anthropic_to_openai(req, "deepseek")
     assert result.thinking is None
+
+
+def test_fireworks_thinking_enabled():
+    """Fireworks uses enable_thinking + thinking_budget like SiliconFlow."""
+    req = MessagesRequest(
+        model="fireworks-kimi-k2p6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "enabled"},
+    )
+    result = anthropic_to_openai(req, "fireworks")
+    assert result.enable_thinking is True
+    assert result.thinking_budget == 16384  # default when no effort
+
+
+def test_fireworks_thinking_with_effort():
+    """Fireworks thinking + effort maps to thinking_budget."""
+    req = MessagesRequest(
+        model="fireworks-kimi-k2p6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "max"},
+    )
+    result = anthropic_to_openai(req, "fireworks")
+    assert result.enable_thinking is True
+    assert result.thinking_budget == 32768
+
+
+def test_fireworks_thinking_disabled():
+    """Fireworks thinking=disabled sets enable_thinking=False."""
+    req = MessagesRequest(
+        model="fireworks-minimax-m2p7",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "disabled"},
+    )
+    result = anthropic_to_openai(req, "fireworks")
+    assert result.enable_thinking is False
+    assert result.thinking_budget is None
+
+
+def test_fireworks_ignores_deepseek_params():
+    """Fireworks backend never receives DeepSeek-style thinking/effort."""
+    req = MessagesRequest(
+        model="fireworks-kimi-k2p6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "enabled"},
+        output_config={"effort": "high"},
+    )
+    result = anthropic_to_openai(req, "fireworks")
+    assert result.thinking is None
+    assert result.reasoning_effort is None
