@@ -554,3 +554,78 @@ async def test_stream_tool_calls_with_finish_in_same_chunk():
     assert events[4][1]["delta"]["stop_reason"] == "tool_use"
 
     assert events[5][0] == "message_stop"
+
+
+@pytest.mark.anyio
+async def test_stream_handles_upstream_error_gracefully():
+    """BridgeError mid-stream yields error SSE event instead of crashing."""
+    from seven_bridges.backends.base import BridgeError
+
+    async def raw_stream():
+        # Send one valid chunk first (simulates partial response before error)
+        yield {
+            "type": "raw",
+            "data": json.dumps(
+                {
+                    "id": "chatcmpl-err",
+                    "choices": [{"delta": {"content": "Halfway through..."}, "finish_reason": None}],
+                }
+            ),
+        }
+        raise BridgeError(
+            message="rate limit exceeded",
+            status_code=429,
+            error_type="rate_limit_error",
+        )
+
+    events = await _collect_stream(translate_openai_stream(raw_stream(), "claude-sonnet-4-6"))
+
+    # Should have message_start, content_block_start, content_block_delta,
+    # content_block_stop, then error
+    assert events[0][0] == "message_start"
+
+    # text block start
+    assert events[1][0] == "content_block_start"
+    assert events[1][1]["content_block"]["type"] == "text"
+
+    # text delta
+    assert events[2][0] == "content_block_delta"
+    assert events[2][1]["delta"]["text"] == "Halfway through..."
+
+    # content_block_stop (closes open block before error)
+    assert events[3][0] == "content_block_stop"
+
+    # error event
+    assert events[4][0] == "error"
+    assert events[4][1]["error"]["type"] == "rate_limit_error"
+    assert events[4][1]["error"]["message"] == "rate limit exceeded"
+
+    # Should NOT have message_delta or message_stop
+    assert len(events) == 5
+
+
+@pytest.mark.anyio
+async def test_stream_handles_immediate_upstream_error():
+    """BridgeError on first iteration yields message_start + error only."""
+    from seven_bridges.backends.base import BridgeError
+
+    async def raw_stream():
+        if False:  # needed to make this an async generator
+            yield {"type": "raw", "data": ""}
+        raise BridgeError(
+            message="rate limit exceeded",
+            status_code=429,
+            error_type="rate_limit_error",
+        )
+
+    events = await _collect_stream(translate_openai_stream(raw_stream(), "claude-sonnet-4-6"))
+
+    # message_start is yielded before the try block
+    assert events[0][0] == "message_start"
+
+    # error event — no content blocks were ever opened
+    assert events[1][0] == "error"
+    assert events[1][1]["error"]["type"] == "rate_limit_error"
+
+    # No message_delta or message_stop
+    assert len(events) == 2
