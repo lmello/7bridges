@@ -14,12 +14,13 @@ jobs:
         id: check
         run: |
           msg="${{ github.event.head_commit.message }}"
+          subject="$(echo "$msg" | head -1)"
           # Skip release commits to avoid recursive loops
-          if echo "$msg" | grep -qE "^chore\(release\)"; then
+          if echo "$subject" | grep -qE "^chore\(release\)"; then
             echo "release=false" >> "$GITHUB_OUTPUT"
             echo "Skipping release commit"
           # Only release on conventional commits that affect version
-          elif echo "$msg" | grep -qE "^(feat|fix|perf|docs|refactor|chore|test|build|ci|style|revert)(\(.+\))?!?:"; then
+          elif echo "$subject" | grep -qE "^(feat|fix|perf|docs|refactor|chore|test|build|ci|style|revert)(\([^)]+\))?!?:"; then
             echo "release=true" >> "$GITHUB_OUTPUT"
             echo "Commit matches conventional commit format"
           else
