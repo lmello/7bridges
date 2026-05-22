@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v1.7.0 (2026-05-22)
+
+### Bug Fixes
+
+- **fireworks**: Use Anthropic-compatible thinking object instead of SiliconFlow params
+  ([`0ab9750`](https://github.com/sdkks/7bridges/commit/0ab97506bc47db3615b5a41ca6b6c5d6e4ba3a1a))
+
+- **fireworks**: Use reasoning_effort string for MiniMax M2.7 instead of thinking object
+  ([`217d507`](https://github.com/sdkks/7bridges/commit/217d5074522f5e651959b5192077928c48a05c85))
+
+### Documentation
+
+- Add Fireworks AI bridge and models to README
+  ([`b0c870f`](https://github.com/sdkks/7bridges/commit/b0c870fe07bc200a08873f6e6a928833eb5580a2))
+
+### Features
+
+- **fireworks**: Add Fireworks AI backend with Kimi K2.6 and MiniMax M2.7
+  ([`25e2721`](https://github.com/sdkks/7bridges/commit/25e2721bf4b2da5d19dc461a070101b6259fb760))
+
+
 ## v1.6.0 (2026-05-22)
 
 ### Bug Fixes
