@@ -6,7 +6,7 @@ An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy th
 
 # What's new?
 
-Added support for SiliconFlow (MiniMax M2.5) and Ollama. Some working examples are further down.
+Added support for SiliconFlow (MiniMax M2.5, Kimi K2.6, GLM 5.1) and Ollama. Some working examples are further down.
 
 
 https://github.com/user-attachments/assets/8e6fa365-d528-4307-ad36-61fa040a4cc2
@@ -59,7 +59,8 @@ Each backend is a "bridge":
 | DeepSeek | `api.deepseek.com` | `deepseek-v4-pro` (Sonnet), `deepseek-v4-flash` (Haiku) | ❌ | ✅ | ✅ | Live |
 | Kimi | `api.kimi.com/coding/v1` | `kimi-for-coding` (K2.6) | ✅ | ✅ | ✅ | Live |
 | Ollama | `localhost:11434` | Configurable via env vars | ✅ | ✅ | ✅ | Live |
-| SiliconFlow | `api.siliconflow.com/v1` | `MiniMaxAI/MiniMax-M2.5` | ❌ | ✅ | ✅ | Live |
+| SiliconFlow | `api.siliconflow.com/v1` | MiniMax M2.5, GLM 5.1 | ❌ | ✅ | ✅ | Live |
+| SiliconFlow | `api.siliconflow.com/v1` | Kimi K2.6 | ✅ | ✅ | ✅ | Live |
 
 > **Note on vision/image support:** DeepSeek v4 does not natively support image input. By default, image requests to DeepSeek receive a **soft 200 rejection** with guidance to use OCR/DOM fallbacks instead of a fatal 400 error. For full vision support, you can either use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) which maps to Kimi K2.6, or enable the experimental **vision fallback** feature that routes images to a separate VL backend (Kimi or Ollama) and feeds the text description back to the blind model. See [docs/VISION_FALLBACK.md](docs/VISION_FALLBACK.md).
 
@@ -75,7 +76,9 @@ Each backend is a "bridge":
 | `ollama-haiku` | Ollama | `qwen3.5:9b` | 65,536 | 8,192 |
 | `ollama-gpt-oss` | Ollama | `gpt-oss:20b` | 65,536 | 8,192 |
 | `ollama-gemma` | Ollama | `gemma4:26b` | 65,536 | 8,192 |
-| `siliconflow-minimax-m2.5` | SiliconFlow | `MiniMaxAI/MiniMax-M2.5` | 262,144 | 32,768 |
+| `siliconflow-minimax-m2.5` | SiliconFlow | `MiniMaxAI/MiniMax-M2.5` | 196,608 | 196,608 |
+| `siliconflow-kimi-k2.6` | SiliconFlow | `moonshotai/Kimi-K2.6` | 262,144 | 262,144 |
+| `siliconflow-glm-5.1` | SiliconFlow | `zai-org/GLM-5.1` | 200,000 | 131,072 |
 
 ## Ollama Setup
 
@@ -320,12 +323,13 @@ Includes: gitleaks, ruff check, ruff format, mypy, pytest with 80% coverage gate
 
 ## Tests
 
-50 tests, ~92% coverage:
+113 tests, ~82% coverage:
 
 - **Unit**: Request/response field mapping, content block conversion, streaming event generation
-- **E2E**: Full HTTP round-trips with mocked DeepSeek and Kimi APIs using `respx`
+- **E2E**: Full HTTP round-trips with mocked DeepSeek, Kimi, SiliconFlow, and Ollama APIs using `respx`
 - **Smoke**: Health, auth, model listing, validation errors
 - **Debug**: Middleware request/response capture
+- **Vision fallback**: Image description extraction and VL round-trips
 
 ## License
 

@@ -266,6 +266,128 @@ def test_deepseek_upstream_error_mapping():
     assert data["error"]["type"] == "rate_limit_error"
 
 
+@respx.mock
+def test_deepseek_thinking_passthrough():
+    """Verify thinking/effort fields are sent to DeepSeek."""
+    route = respx.post("https://api.deepseek.com/beta/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-ds-4",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "deepseek-chat",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Thoughtful."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-sonnet-4-6",
+            "messages": [{"role": "user", "content": "Think hard"}],
+            "max_tokens": 100,
+            "thinking": {"type": "enabled"},
+            "output_config": {"effort": "xhigh"},
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    upstream = json.loads(route.calls[0].request.content)
+    assert upstream["thinking"] == {"type": "enabled"}
+    assert upstream["reasoning_effort"] == "xhigh"
+
+
+@respx.mock
+def test_deepseek_thinking_disabled():
+    """Verify thinking=disabled is passed through to DeepSeek."""
+    route = respx.post("https://api.deepseek.com/beta/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-ds-5",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "deepseek-chat",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Straight answer."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-sonnet-4-6",
+            "messages": [{"role": "user", "content": "Quick answer"}],
+            "max_tokens": 100,
+            "thinking": {"type": "disabled"},
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    upstream = json.loads(route.calls[0].request.content)
+    assert upstream["thinking"] == {"type": "disabled"}
+
+
+@respx.mock
+def test_deepseek_thinking_adaptive():
+    """Verify thinking=adaptive is mapped to enabled for DeepSeek."""
+    route = respx.post("https://api.deepseek.com/beta/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-ds-6",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "deepseek-chat",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Adaptive answer."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-sonnet-4-6",
+            "messages": [{"role": "user", "content": "Solve this"}],
+            "max_tokens": 100,
+            "thinking": {"type": "adaptive"},
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    upstream = json.loads(route.calls[0].request.content)
+    assert upstream["thinking"] == {"type": "enabled"}
+
+
 # ---------------------------------------------------------------------------
 # Kimi e2e tests
 # ---------------------------------------------------------------------------
@@ -796,6 +918,526 @@ def test_ollama_upstream_error():
 
 
 # ---------------------------------------------------------------------------
+# SiliconFlow e2e tests
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+def test_siliconflow_non_streaming_text():
+    respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-sf-1",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "MiniMaxAI/MiniMax-M2.5",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Hello from SiliconFlow!"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-minimax-m2.5",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "message"
+    assert data["model"] == "siliconflow-minimax-m2.5"
+    assert len(data["content"]) == 1
+    assert data["content"][0]["type"] == "text"
+    assert data["content"][0]["text"] == "Hello from SiliconFlow!"
+    assert data["stop_reason"] == "end_turn"
+    assert data["usage"]["input_tokens"] == 10
+    assert data["usage"]["output_tokens"] == 5
+
+    # Verify the upstream request
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["model"] == "MiniMaxAI/MiniMax-M2.5"
+    assert upstream["messages"][0]["role"] == "user"
+
+
+@respx.mock
+def test_siliconflow_streaming_text():
+    chunks = [
+        json.dumps(
+            {
+                "id": "chatcmpl-sf-2",
+                "choices": [{"delta": {"content": "Hello"}, "finish_reason": None}],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-sf-2",
+                "choices": [{"delta": {"content": " world"}, "finish_reason": "stop"}],
+            }
+        ),
+    ]
+
+    respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            text="".join(f"data:{c}\n\n" for c in chunks) + "data:[DONE]\n\n",
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-minimax-m2.5",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "text/event-stream"
+
+    events = _parse_sse(resp.text)
+    assert events[0][0] == "message_start"
+    assert events[0][1]["message"]["model"] == "siliconflow-minimax-m2.5"
+
+    text_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "text_delta"
+    ]
+    assert len(text_deltas) == 2
+    assert text_deltas[0][1]["delta"]["text"] == "Hello"
+    assert text_deltas[1][1]["delta"]["text"] == " world"
+
+    assert events[-2][0] == "message_delta"
+    assert events[-2][1]["delta"]["stop_reason"] == "end_turn"
+    assert events[-1][0] == "message_stop"
+
+
+@respx.mock
+def test_siliconflow_with_reasoning():
+    respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-sf-3",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "moonshotai/Kimi-K2.6",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "The answer is 42.",
+                            "reasoning_content": "Let me think...",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-kimi-k2.6",
+            "messages": [{"role": "user", "content": "What is the answer?"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["model"] == "siliconflow-kimi-k2.6"
+    assert len(data["content"]) == 2
+    assert data["content"][0]["type"] == "thinking"
+    assert data["content"][0]["thinking"] == "Let me think..."
+    assert data["content"][0]["signature"] == ""
+    assert data["content"][1]["type"] == "text"
+    assert data["content"][1]["text"] == "The answer is 42."
+
+
+@respx.mock
+def test_siliconflow_streaming_with_reasoning():
+    chunks = [
+        json.dumps(
+            {
+                "id": "chatcmpl-sf-4",
+                "choices": [{"delta": {"reasoning_content": "Let me"}, "finish_reason": None}],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-sf-4",
+                "choices": [{"delta": {"reasoning_content": " think..."}, "finish_reason": None}],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-sf-4",
+                "choices": [{"delta": {"content": "42"}, "finish_reason": "stop"}],
+            }
+        ),
+    ]
+
+    respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            text="".join(f"data:{c}\n\n" for c in chunks) + "data:[DONE]\n\n",
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-kimi-k2.6",
+            "messages": [{"role": "user", "content": "What is the answer?"}],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+
+    thinking_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "thinking_delta"
+    ]
+    assert len(thinking_deltas) == 2
+    assert thinking_deltas[0][1]["delta"]["thinking"] == "Let me"
+    assert thinking_deltas[1][1]["delta"]["thinking"] == " think..."
+
+    text_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "text_delta"
+    ]
+    assert len(text_deltas) == 1
+    assert text_deltas[0][1]["delta"]["text"] == "42"
+
+    assert events[-2][0] == "message_delta"
+    assert events[-2][1]["delta"]["stop_reason"] == "end_turn"
+
+
+@respx.mock
+def test_siliconflow_streaming_tool_calls():
+    chunks = [
+        json.dumps(
+            {
+                "id": "chatcmpl-sf-5",
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {"name": "get_weather", "arguments": ""},
+                                }
+                            ]
+                        },
+                        "finish_reason": None,
+                    }
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-sf-5",
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {"index": 0, "function": {"arguments": '{"location": "'}}
+                            ]
+                        },
+                        "finish_reason": None,
+                    }
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-sf-5",
+                "choices": [
+                    {
+                        "delta": {"tool_calls": [{"index": 0, "function": {"arguments": 'NYC"}'}}]},
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+            }
+        ),
+    ]
+
+    respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            text="".join(f"data:{c}\n\n" for c in chunks) + "data:[DONE]\n\n",
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-kimi-k2.6",
+            "messages": [{"role": "user", "content": "Weather in NYC?"}],
+            "max_tokens": 100,
+            "tools": [
+                {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"location": {"type": "string"}},
+                        "required": ["location"],
+                    },
+                }
+            ],
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+
+    tool_starts = [
+        e
+        for e in events
+        if e[0] == "content_block_start" and e[1]["content_block"]["type"] == "tool_use"
+    ]
+    assert len(tool_starts) == 1
+    assert tool_starts[0][1]["content_block"]["name"] == "get_weather"
+
+    json_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "input_json_delta"
+    ]
+    assert len(json_deltas) == 2
+    assert json_deltas[0][1]["delta"]["partial_json"] == '{"location": "'
+    assert json_deltas[1][1]["delta"]["partial_json"] == 'NYC"}'
+
+    assert events[-2][0] == "message_delta"
+    assert events[-2][1]["delta"]["stop_reason"] == "tool_use"
+
+
+@respx.mock
+def test_siliconflow_upstream_error():
+    respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            429,
+            json={"error": {"message": "Rate limit exceeded", "type": "rate_limit_error"}},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-minimax-m2.5",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 429
+    data = resp.json()
+    assert data["type"] == "error"
+    assert data["error"]["type"] == "rate_limit_error"
+
+
+@respx.mock
+def test_siliconflow_soft_rejects_images(monkeypatch):
+    """Non-vision backends return 200 with guidance instead of fatal 400."""
+    monkeypatch.setattr(settings, "vision_fallback_enabled", False)
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-minimax-m2.5",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Describe this:"},
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": "abc123",
+                            },
+                        },
+                    ],
+                }
+            ],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "message"
+    assert "vision_in" in data["content"][0]["text"].lower()
+    assert "ocr" in data["content"][0]["text"].lower()
+
+
+@respx.mock
+def test_siliconflow_thinking_passthrough():
+    """Verify thinking/effort fields are sent to SiliconFlow."""
+    route = respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-sf-6",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "moonshotai/Kimi-K2.6",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "Thoughtful response.",
+                            "reasoning_content": "Deep thinking...",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-kimi-k2.6",
+            "messages": [{"role": "user", "content": "Think hard"}],
+            "max_tokens": 100,
+            "thinking": {"type": "enabled"},
+            "output_config": {"effort": "xhigh"},
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+
+    # Verify upstream received enable_thinking + thinking_budget
+    upstream = json.loads(route.calls[0].request.content)
+    assert upstream["enable_thinking"] is True
+    assert upstream["thinking_budget"] == 24576
+
+
+@respx.mock
+def test_siliconflow_thinking_disabled():
+    """Verify thinking=disabled is passed through."""
+    route = respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-sf-7",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "zai-org/GLM-5.1",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Straight answer."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-glm-5.1",
+            "messages": [{"role": "user", "content": "Quick answer"}],
+            "max_tokens": 100,
+            "thinking": {"type": "disabled"},
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+
+    upstream = json.loads(route.calls[0].request.content)
+    assert upstream["enable_thinking"] is False
+
+
+@respx.mock
+def test_siliconflow_streaming_error():
+    """Upstream errors during streaming are sent as in-stream SSE error events."""
+    respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            503,
+            text='{"error": {"message": "Service overloaded"}}',
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "siliconflow-minimax-m2.5",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+    error_events = [e for e in events if e[0] == "error"]
+    assert len(error_events) == 1
+    assert error_events[0][1]["error"]["type"] == "overloaded_error"
+    assert error_events[0][1]["error"]["status_code"] == 503
+
+
+# ---------------------------------------------------------------------------
 # Common e2e tests
 # ---------------------------------------------------------------------------
 
@@ -843,6 +1485,9 @@ def test_list_models():
     assert "ollama-haiku" in model_ids
     assert "ollama-gpt-oss" in model_ids
     assert "ollama-gemma" in model_ids
+    assert "siliconflow-minimax-m2.5" in model_ids
+    assert "siliconflow-kimi-k2.6" in model_ids
+    assert "siliconflow-glm-5.1" in model_ids
 
 
 def test_health():

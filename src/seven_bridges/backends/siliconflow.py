@@ -33,13 +33,25 @@ class SiliconFlowBridge(Bridge):
 
     name = "siliconflow"
     default_api_base = "https://api.siliconflow.com/v1"
-    capabilities = VendorCapabilities(
-        supports_vision=False,
-        supports_reasoning=True,
-        supports_tool_calls=True,
-        supports_video=False,
-        max_tokens=32768,
-    )
+
+    # Models hosted on SiliconFlow that natively support vision input.
+    _vision_models: frozenset[str] = frozenset({"moonshotai/Kimi-K2.6"})
+
+    def __init__(
+        self,
+        api_key: str,
+        api_base: str | None = None,
+        model_alias: str = "",
+        backend_model: str = "",
+    ):
+        super().__init__(api_key, api_base, model_alias, backend_model)
+        self.capabilities = VendorCapabilities(
+            supports_vision=backend_model in self._vision_models,
+            supports_reasoning=True,
+            supports_tool_calls=True,
+            supports_video=False,
+            max_tokens=32768,
+        )
 
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         """Send a non-streaming request to SiliconFlow."""

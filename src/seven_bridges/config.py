@@ -155,8 +155,24 @@ class Settings:
             bridge="siliconflow",
             backend_model="MiniMaxAI/MiniMax-M2.5",
             display_name="MiniMax M2.5 (SiliconFlow)",
+            context_window=196_608,
+            max_output_tokens=196_608,
+        ),
+        "siliconflow-kimi-k2.6": ModelRoute(
+            alias="siliconflow-kimi-k2.6",
+            bridge="siliconflow",
+            backend_model="moonshotai/Kimi-K2.6",
+            display_name="Kimi K2.6 (SiliconFlow)",
             context_window=262_144,
-            max_output_tokens=32768,
+            max_output_tokens=262_144,
+        ),
+        "siliconflow-glm-5.1": ModelRoute(
+            alias="siliconflow-glm-5.1",
+            bridge="siliconflow",
+            backend_model="zai-org/GLM-5.1",
+            display_name="GLM 5.1 (SiliconFlow)",
+            context_window=200_000,
+            max_output_tokens=131_072,
         ),
     }
 
