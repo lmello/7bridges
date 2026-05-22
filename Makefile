@@ -1,4 +1,4 @@
-.PHONY: install dev lock start stop restart flush logs run-debug tail-logs test test-unit test-e2e test-smoke test-cov test-ci lint format check
+.PHONY: install dev lock start stop restart flush logs run-debug tail-logs test test-unit test-e2e test-smoke test-cov test-ci test-full lint format check
 
 install:
 	uv venv --python 3.13
@@ -73,6 +73,9 @@ lint:
 
 format:
 	.venv/bin/ruff format src/ tests/
+
+test-full:
+	.venv/bin/pytest tests/ -v
 
 check: lint test
 
