@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-05-22)
+
+### Bug Fixes
+
+- **ci**: Check only commit subject line for conventional format
+  ([`846f81d`](https://github.com/sdkks/7bridges/commit/846f81dcbac5a5f06b059e5d17a938bc8ad54430))
+
+- **ci**: Exclude live-API tests from pre-commit hook
+  ([`a32e923`](https://github.com/sdkks/7bridges/commit/a32e9231e677aa144687645aff9e04fb94f9a4b7))
+
+### Features
+
+- **debug**: Log enable_thinking and thinking_budget in outgoing requests
+  ([`7c57027`](https://github.com/sdkks/7bridges/commit/7c5702791cd113418937cc397021510f79538be4))
+
+
 ## v1.5.0 (2026-05-22)
 
 ### Features
