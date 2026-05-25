@@ -84,6 +84,25 @@ Each backend is a "bridge":
 | `fireworks-kimi-k2p6` | Fireworks AI | `accounts/fireworks/models/kimi-k2p6` | 262,144 | 262,144 |
 | `fireworks-minimax-m2p7` | Fireworks AI | `accounts/fireworks/models/minimax-m2p7` | 204,800 | 131,072 |
 
+### Per-Bridge Notes
+
+**Kimi (`claude-opus-4-6`, `claude-opus-4-7`)**
+
+- **Thinking / reasoning:** The bridge does not send a `thinking` parameter to Kimi. Kimi's API defaults `thinking.type` to `"enabled"` when the field is absent, so reasoning is active by default. Explicitly setting `thinking: {"type": "disabled"}` in the Anthropic request is currently ignored — reasoning will still occur. Kimi does not support `budget_tokens` or `reasoning_effort`; there is no way to control reasoning depth.
+- **Context window:** The bridge advertises `262,144` tokens in the `/v1/models` response. Kimi K2.6 genuinely supports this. However, Claude Code uses its own hardcoded model catalog for known Anthropic aliases and may assume a larger context window (200K or 1M for Opus-tier models) for session compaction decisions. If Claude Code accumulates a context larger than 256K tokens before compacting, Kimi will reject the request. The bridge does not validate context size — Kimi's error is forwarded as-is.
+
+**DeepSeek (`claude-sonnet-4-6`, `claude-haiku-4-5`)**
+
+- **Thinking / reasoning:** The bridge maps Anthropic `thinking.type` to DeepSeek's `thinking` object, and `output_config.effort` to DeepSeek's `reasoning_effort`. DeepSeek aliases effort tiers server-side (`low`/`medium` → `high`, `xhigh` → `max`).
+
+**SiliconFlow (`siliconflow-kimi-k2.6`, `siliconflow-minimax-m2.5`, `siliconflow-glm-5.1`)**
+
+- **Thinking / reasoning:** The bridge maps Anthropic `thinking.type` to `enable_thinking` (bool) and `output_config.effort` to a token budget (`thinking_budget`). Budget mapping: `low`→4096, `medium`→8192, `high`→16384, `xhigh`→24576, `max`→32768.
+
+**Fireworks AI (`fireworks-kimi-k2p6`, `fireworks-minimax-m2p7`)**
+
+- **Thinking / reasoning:** Kimi K2.6 via Fireworks accepts the Anthropic-compatible `thinking` object with `type` and `budget_tokens`. MiniMax M2.7 only accepts `reasoning_effort` string (`low`/`medium`/`high`); the bridge converts accordingly.
+
 ## Ollama Setup
 
 The Ollama bridge talks to your local Ollama instance via the [ollama-python SDK](https://github.com/ollama/ollama-python). The aliases `ollama-sonnet`, `ollama-haiku`, `ollama-gpt-oss`, and `ollama-gemma` map to open-weight models that serve as rough local analogues for the Anthropic model tiers — they trade some capability for zero-cost, offline, private inference. Models are configured through environment variables in `.envrc`:
