@@ -17,7 +17,6 @@ module.exports = {
     watch: false,
     env: {
       PYTHONPATH: 'src',
-      BRIDGE_DEBUG: '1',
     },
   }]
 };

@@ -55,6 +55,7 @@ class Bridge(ABC):
         self.model_alias = model_alias
         self.backend_model = backend_model
         self._debug_log_path: str | None = None
+        self.usage_context: dict[str, Any] | None = None
 
     def _log_outgoing(self, outgoing: dict[str, Any]) -> None:
         """Log the translated outgoing request to the debug JSONL file."""

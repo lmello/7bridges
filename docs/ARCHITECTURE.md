@@ -175,13 +175,17 @@ src/seven_bridges/
 ├── main.py              # FastAPI routing, auth, capability validation
 ├── config.py            # Model routing table (alias → bridge + backend_model)
 ├── debug.py             # Optional JSONL request/response logging
+├── usage_log.py         # Per-request token usage logging to logs/usage.jsonl
 ├── models/
 │   ├── anthropic.py     # MessagesRequest, MessagesResponse, ContentBlock, Usage
 │   └── openai.py        # ChatCompletionRequest, ChatCompletionResponse, DeltaMessage
 ├── backends/
 │   ├── base.py          # Bridge ABC, BridgeError, VendorCapabilities
 │   ├── deepseek.py      # DeepSeek bridge (api.deepseek.com/beta)
-│   └── kimi.py          # Kimi bridge (api.kimi.com/coding/v1)
+│   ├── kimi.py          # Kimi bridge (api.kimi.com/coding/v1)
+│   ├── fireworks.py     # Fireworks AI bridge
+│   ├── siliconflow.py   # SiliconFlow bridge
+│   └── ollama.py        # Ollama local bridge
 └── translation/
     ├── request.py       # anthropic_to_openai()
     ├── response.py      # openai_to_anthropic()

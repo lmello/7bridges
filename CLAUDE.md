@@ -11,7 +11,7 @@ This is an **Anthropic Messages API proxy** — a translation layer, not a gener
 ### 1. Small, Tested Changes
 
 - **One concern per commit.** A commit should touch either translation logic, a backend, tests, or docs — not all four at once unless the change is trivial.
-- **Never commit without running tests.** The pre-commit gate requires 80% coverage and all 58 tests passing.
+- **Never commit without running tests.** The pre-commit gate requires 80% coverage and all 156 tests passing.
 - **Prefer fixing over adding.** If a feature can be achieved by tightening existing translation rather than adding new endpoints, do that.
 
 ### 2. Test-First for Translation Logic
@@ -110,6 +110,7 @@ If any step fails, the commit is rejected. Fix and retry.
 | `src/seven_bridges/backends/` | HTTP clients + capability flags | E2E test + capability audit |
 | `src/seven_bridges/models/` | Pydantic schemas | Only add fields; never remove without deprecation |
 | `src/seven_bridges/debug.py` | Request/response logging + error handling + log cleanup | Keep structure stable; rebuild StreamingResponse properly, never mutate internals |
+| `src/seven_bridges/usage_log.py` | Per-request token usage logging to JSONL | Failures must be silently ignored; never break a request |
 | `tests/` | All tests | Mirror the source structure |
 | `docs/` | Architecture diagrams, API specs | Update when behavior changes |
 

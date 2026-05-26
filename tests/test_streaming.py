@@ -568,7 +568,9 @@ async def test_stream_handles_upstream_error_gracefully():
             "data": json.dumps(
                 {
                     "id": "chatcmpl-err",
-                    "choices": [{"delta": {"content": "Halfway through..."}, "finish_reason": None}],
+                    "choices": [
+                        {"delta": {"content": "Halfway through..."}, "finish_reason": None}
+                    ],
                 }
             ),
         }

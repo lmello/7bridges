@@ -4,76 +4,141 @@ An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy th
 
 > **Agentic development guide:** See [`CLAUDE.md`](CLAUDE.md) (also symlinked as [`AGENTS.md`](AGENTS.md)) for conventions on testing integrity, development cadence, backend capability audits, and common pitfalls when working with this codebase.
 
-# What's new?
+## What's New?
 
-Added support for SiliconFlow (MiniMax M2.5, Kimi K2.6, GLM 5.1), Fireworks AI (Kimi K2.6, MiniMax M2.7), and Ollama. Some working examples are further down.
+Added support for **SiliconFlow** (MiniMax M2.5, Kimi K2.6, GLM 5.1), **Fireworks AI** (Kimi K2.6, MiniMax M2.7), and **Ollama**.
 
+---
 
-https://github.com/user-attachments/assets/8e6fa365-d528-4307-ad36-61fa040a4cc2
+## Table of Contents
 
+- [Why I Built This](#why-i-built-this)
+- [What You Need](#what-you-need)
+- [Quick Start (5 Minutes)](#quick-start-5-minutes)
+- [Pick a Model](#pick-a-model)
+- [Run It](#run-it)
+- [Usage Examples](#usage-examples)
+- [Logging](#logging)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [License](#license)
 
+---
 
 ## Why I Built This
 
 I wanted to use other models (DeepSeek, Kimi, Ollama, etc.) with Claude Code without fighting LiteLLM every step of the way. With LiteLLM I kept running into:
 
-- **Reasoning/thinking blocks** not being translated correctly — Claude Code expects `thinking` content blocks with signatures; LiteLLM either drops them or mangles the format
-- **Cache token accounting** being inconsistent — `cache_read_input_tokens` and `cache_creation_input_tokens` would be missing or wrong
-- **Streaming SSE** breaking on edge cases — empty deltas, usage-only chunks, or `data:` lines without spaces would cause silent failures
-- **Too many moving parts** — LiteLLM's broad-compatibility approach means dozens of internal transformation pipelines, any of which can break for Anthropic-specific features
+- **Reasoning/thinking blocks** not being translated correctly
+- **Cache token accounting** being inconsistent
+- **Streaming SSE** breaking on edge cases
+- **Too many moving parts** — dozens of internal transformation pipelines
 
 This project takes the opposite approach: **small, explicit, per-backend translations** where every field that crosses the boundary is deliberately mapped and tested.
 
 ## Vision
 
-Every non-Anthropic model speaks the **Anthropic Messages API** (`/v1/messages`). The bridge is a translation layer — nothing more. You point Claude Code at `localhost:4001`, pick a model alias like `claude-opus-4-6`, and the bridge forwards your request to the actual upstream (Kimi, DeepSeek, etc.), then translates the response back into native Anthropic format including:
-
-- `thinking` blocks with reasoning content
-- `tool_use` / `tool_result` blocks
-- `image` input blocks (where upstream supports vision)
-- Streaming SSE events (`message_start`, `content_block_delta`, `message_stop`)
-- Proper `usage` with cache accounting
-
-## Architecture
+Every non-Anthropic model speaks the **Anthropic Messages API** (`/v1/messages`). You point Claude Code at `localhost:4001`, pick a model alias like `claude-opus-4-6`, and the bridge forwards your request to the actual upstream, then translates the response back into native Anthropic format.
 
 ```
-┌─────────────┐     Anthropic API      ┌──────────────┐     Native API      ┌────────────┐
-│ Claude Code │ ──── /v1/messages ───▶ │ 7 Bridges    │ ──── /chat/ ─────▶ │ DeepSeek   │
-│  (or any    │ ◀───  (responses) ──── │  (proxy)     │ ◀─── completions ──│ Kimi       │
-│  Anthropic  │                        │  :4001       │                    │ ...        │
-│  client)    │                        │              │                    │            │
-└─────────────┘                        └──────────────┘                    └────────────┘
+├───────────┐     Anthropic API      ├───────────┐     Native API      ├────────┐
+│ Claude Code │ ──── /v1/messages ───▶ │ 7 Bridges    │ ──── /chat/ ────▶ │ DeepSeek   │
+│  (or any    │ ◀─── (responses) ────│  (proxy)     │ ◀─── completions ──│ Kimi       │
+│  Anthropic  │                        │  :4001       │                    │ Ollama     │
+│  client)    │                        │              │                    │ ...        │
+└───────────┘                        └───────────┘                    └────────┘
 ```
 
-Each backend is a "bridge":
-- Receives Anthropic-format `MessagesRequest`
-- Translates to the backend's native request format
-- Forwards the request via HTTP
-- Translates the native response back to Anthropic-format `MessagesResponse`
-- Handles streaming SSE translation chunk-by-chunk
+---
 
-## Bridges
+## What You Need
 
-| Bridge | Backend | Model | Vision | Reasoning | Tools | Status |
-|---|---|---|---|---|---|---|
-| DeepSeek | `api.deepseek.com` | `deepseek-v4-pro` (Sonnet), `deepseek-v4-flash` (Haiku) | ❌ | ✅ | ✅ | Live |
-| Kimi | `api.kimi.com/coding/v1` | `kimi-for-coding` (K2.6) | ✅ | ✅ | ✅ | Live |
-| Ollama | `localhost:11434` | Configurable via env vars | ✅ | ✅ | ✅ | Live |
-| SiliconFlow | `api.siliconflow.com/v1` | MiniMax M2.5, GLM 5.1 | ❌ | ✅ | ✅ | Live |
-| SiliconFlow | `api.siliconflow.com/v1` | Kimi K2.6 | ✅ | ✅ | ✅ | Live |
-| Fireworks AI | `api.fireworks.ai/inference/v1` | Kimi K2.6 | ✅ | ✅ | ✅ | Live |
-| Fireworks AI | `api.fireworks.ai/inference/v1` | MiniMax M2.7 | ❌ | ✅ | ✅ | Live |
+| Requirement | What It Is | How to Check |
+|---|---|---|
+| **Python 3.13+** | The programming language this tool is written in | `python3 --version` |
+| **uv** | A fast Python package manager | `uv --version` |
+| **Git** | To download this project | `git --version` |
+| **An API key** | From at least one backend provider | See below |
 
-> **Note on vision/image support:** DeepSeek v4 does not natively support image input. By default, image requests to DeepSeek receive a **soft 200 rejection** with guidance to use OCR/DOM fallbacks instead of a fatal 400 error. For full vision support, you can either use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) which maps to Kimi K2.6, or enable the experimental **vision fallback** feature that routes images to a separate VL backend (Kimi or Ollama) and feeds the text description back to the blind model. See [docs/VISION_FALLBACK.md](docs/VISION_FALLBACK.md).
+**You do NOT need all of these.** Pick one backend and get one API key. Many are free to try with credit.
 
-### Model Aliases
+> **Windows users:** This project runs on Linux and macOS. Use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and follow the Linux instructions.
 
-| Alias | Backend | Model | Context | Max Output |
+---
+
+## Quick Start (5 Minutes)
+
+If you already have `uv` installed and an API key ready:
+
+```bash
+# 1. Download the project
+git clone https://github.com/sdkks/7bridges.git
+cd 7bridges
+
+# 2. Create the Python environment and install dependencies
+uv venv --python 3.13
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+
+# 3. Set your API key (example: DeepSeek)
+export DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+export BRIDGE_API_KEY="ollama"  # this is the password Claude Code will use
+
+# 4. Start the server
+uvicorn seven_bridges.main:app --reload --port 4001
+```
+
+In another terminal:
+
+```bash
+# 5. Point Claude Code at the bridge
+export ANTHROPIC_BASE_URL="http://localhost:4001"
+export ANTHROPIC_API_KEY="ollama"
+claude
+```
+
+Then inside Claude Code, pick a model:
+
+```
+/model claude-sonnet-4-6
+```
+
+Done! To verify it's working, try:
+
+```bash
+curl http://localhost:4001/v1/models
+curl -X POST http://localhost:4001/v1/messages \
+  -H "x-api-key: ollama" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-sonnet-4-6", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 10}'
+```
+
+> **New here?** See [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) for a full step-by-step walkthrough with platform-specific instructions (macOS, Linux, WSL2), per-backend setup guides, and environment variable explanations.
+
+---
+
+## Pick a Model
+
+**New to this?** Start here:
+
+| If you want... | Use this alias | Backend | Cost | Notes |
+|---|---|---|---|---|
+| Best overall quality | `claude-opus-4-6` | Kimi K2.6 | Paid | Excellent reasoning, vision, tools. 262K context. |
+| Fast and cheap | `claude-haiku-4-5` | DeepSeek v4-flash | Paid | Very fast, 1M context, great for quick tasks. |
+| Good balance | `claude-sonnet-4-6` | DeepSeek v4-pro | Paid | Strong reasoning, 1M context, cheaper than Kimi. |
+| Completely free | `ollama-sonnet` | Local Qwen 3.6 | Free | Runs on your computer. Needs ~32GB RAM. |
+| Free, lighter | `ollama-haiku` | Local Qwen 3.5 | Free | Runs on your computer. Needs ~16GB RAM. |
+
+**Full model alias reference:**
+
+| Alias | Backend | Actual Model | Context | Max Output |
 |---|---|---|---|---|
 | `claude-sonnet-4-6` | DeepSeek | `deepseek-v4-pro` | 1,048,576 | 393,216 |
 | `claude-haiku-4-5` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
 | `claude-opus-4-6` | Kimi | `kimi-for-coding` | 262,144 | 32,768 |
-| `claude-haiku-4-5-20251001` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
+| `claude-opus-4-7` | Kimi | `kimi-for-coding` | 262,144 | 32,768 |
 | `ollama-sonnet` | Ollama | `qwen3.6:35b-a3b-coding-nvfp4` | 32,768 | 8,192 |
 | `ollama-haiku` | Ollama | `qwen3.5:9b` | 65,536 | 8,192 |
 | `ollama-gpt-oss` | Ollama | `gpt-oss:20b` | 65,536 | 8,192 |
@@ -84,127 +149,37 @@ Each backend is a "bridge":
 | `fireworks-kimi-k2p6` | Fireworks AI | `accounts/fireworks/models/kimi-k2p6` | 262,144 | 262,144 |
 | `fireworks-minimax-m2p7` | Fireworks AI | `accounts/fireworks/models/minimax-m2p7` | 204,800 | 131,072 |
 
-### Per-Bridge Notes
+> **Per-bridge details:** Thinking/reasoning behavior, vision support, and known quirks for each backend are documented in [`docs/BRIDGE_NOTES.md`](docs/BRIDGE_NOTES.md).
 
-**Kimi (`claude-opus-4-6`, `claude-opus-4-7`)**
+---
 
-- **Thinking / reasoning:** The bridge does not send a `thinking` parameter to Kimi. Kimi's API defaults `thinking.type` to `"enabled"` when the field is absent, so reasoning is active by default. Explicitly setting `thinking: {"type": "disabled"}` in the Anthropic request is currently ignored — reasoning will still occur. Kimi does not support `budget_tokens` or `reasoning_effort`; there is no way to control reasoning depth.
-- **Context window:** The bridge advertises `262,144` tokens in the `/v1/models` response. Kimi K2.6 genuinely supports this. However, Claude Code uses its own hardcoded model catalog for known Anthropic aliases and may assume a larger context window (200K or 1M for Opus-tier models) for session compaction decisions. If Claude Code accumulates a context larger than 256K tokens before compacting, Kimi will reject the request. The bridge does not validate context size — Kimi's error is forwarded as-is.
+## Run It
 
-**DeepSeek (`claude-sonnet-4-6`, `claude-haiku-4-5`)**
+| Command | When to Use |
+|---|---|
+| `uvicorn seven_bridges.main:app --reload --port 4001` | Development — auto-reloads on code changes |
+| `make run-debug` | Debugging — logs every request/response to `logs/debug/` |
+| `make start` | Production — uses PM2, restarts on crash |
+| `make stop` | Stop the PM2 process |
+| `make logs` | Tail PM2 logs in real time |
 
-- **Thinking / reasoning:** The bridge maps Anthropic `thinking.type` to DeepSeek's `thinking` object, and `output_config.effort` to DeepSeek's `reasoning_effort`. DeepSeek aliases effort tiers server-side (`low`/`medium` → `high`, `xhigh` → `max`).
+### Ollama (Local & Free)
 
-**SiliconFlow (`siliconflow-kimi-k2.6`, `siliconflow-minimax-m2.5`, `siliconflow-glm-5.1`)**
+The Ollama bridge runs models entirely on your computer — no API keys, no costs, works offline. Install Ollama, pull a model, run `ollama serve`, and configure a few env vars. See [`docs/OLLAMA_MODELS.md`](docs/OLLAMA_MODELS.md) for full setup and per-model notes.
 
-- **Thinking / reasoning:** The bridge maps Anthropic `thinking.type` to `enable_thinking` (bool) and `output_config.effort` to a token budget (`thinking_budget`). Budget mapping: `low`→4096, `medium`→8192, `high`→16384, `xhigh`→24576, `max`→32768.
+---
 
-**Fireworks AI (`fireworks-kimi-k2p6`, `fireworks-minimax-m2p7`)**
+## Usage Examples
 
-- **Thinking / reasoning:** Kimi K2.6 via Fireworks accepts the Anthropic-compatible `thinking` object with `type` and `budget_tokens`. MiniMax M2.7 only accepts `reasoning_effort` string (`low`/`medium`/`high`); the bridge converts accordingly.
+### List Available Models
 
-## Ollama Setup
-
-The Ollama bridge talks to your local Ollama instance via the [ollama-python SDK](https://github.com/ollama/ollama-python). The aliases `ollama-sonnet`, `ollama-haiku`, `ollama-gpt-oss`, and `ollama-gemma` map to open-weight models that serve as rough local analogues for the Anthropic model tiers — they trade some capability for zero-cost, offline, private inference. Models are configured through environment variables in `.envrc`:
-
-```sh
-export OLLAMA_HOST="http://127.0.0.1:11434"
-export OLLAMA_SONNET_MODEL="qwen3.6:35b-a3b-coding-nvfp4"
-export OLLAMA_SONNET_CONTEXT_WINDOW=32768
-export OLLAMA_HAIKU_MODEL="qwen3.5:9b"
-export OLLAMA_HAIKU_CONTEXT_WINDOW=65536
-export OLLAMA_GPTOSS_MODEL="gpt-oss:20b"
-export OLLAMA_GPTOSS_CONTEXT_WINDOW=65536
-export OLLAMA_GEMMA_MODEL="gemma4:26b"
-export OLLAMA_GEMMA_CONTEXT_WINDOW=65536
-export OLLAMA_KEEP_ALIVE="300s"
-```
-
-**Pull the models you want before using them:**
-
-```sh
-ollama pull qwen3.6:35b-a3b-coding-nvfp4
-ollama pull qwen3.5:9b
-ollama pull gpt-oss:20b
-ollama pull gemma4:26b
-```
-
-### Using Ollama models in Claude Code
-
-Ollama models use the aliases `ollama-sonnet`, `ollama-haiku`, `ollama-gpt-oss`, and `ollama-gemma`. They are **not** listed in the default `/model` picker (Claude Code filters to known Anthropic aliases). Switch to them explicitly:
-
-```
-/model ollama-sonnet
-/model ollama-haiku
-/model ollama-gpt-oss
-/model ollama-gemma
-```
-
-> **Tip:** Bump the context window in `.envrc` if your hardware allows it. `OLLAMA_SONNET_CONTEXT_WINDOW` and `OLLAMA_HAIKU_CONTEXT_WINDOW` control the `num_ctx` parameter passed to Ollama. These defaults were tested on an Apple Silicon M2 Pro with 32 GB unified memory — your own limits will vary with hardware and the models you choose. Measure the tradeoffs and adjust via env vars.
-
-> **Known quirk:** `ollama-gpt-oss` has a ~50% failure rate on first-time `Write` tool calls — the model sometimes emits the tool call with incomplete parameters. Subsequent retries almost always succeed as the model corrects itself.
-
-See [`docs/OLLAMA_MODELS.md`](docs/OLLAMA_MODELS.md) for full capabilities, architecture details, and per-model notes.
-
-## Setup
-
-```sh
-uv venv --python 3.13
-source .venv/bin/activate
-uv pip install -e ".[dev]"
-```
-
-Set your upstream API keys:
-
-```sh
-export DEEPSEEK_API_KEY="sk-..."
-export KIMI_CODE_API_KEY="sk-..."
-export SILICONFLOW_API_KEY="sk-..."
-export FIREWORKSAI_API_KEY="sk-..."
-export BRIDGE_API_KEY="ollama"  # or whatever you want Claude Code to send
-```
-
-**Auto-loading with direnv** (optional):
-
-```sh
-cp .envrc.example .envrc
-# edit .envrc and fill in your API keys
-direnv allow
-```
-
-This automatically exports the env vars and adds `.venv/bin` to `PATH` whenever you `cd` into the project.
-
-Run via PM2 (production) or directly (development):
-
-```sh
-# Production
-make start
-
-# Development with debug logging
-make run-debug
-
-# Development (basic)
-uvicorn seven_bridges.main:app --reload --port 4001
-```
-
-Point Claude Code at the bridge:
-
-```sh
-export ANTHROPIC_BASE_URL="http://localhost:4001"
-export ANTHROPIC_API_KEY="ollama"
-```
-
-## Usage
-
-List available models:
-
-```sh
+```bash
 curl http://localhost:4001/v1/models
 ```
 
-Send a message (non-streaming):
+### Send a Message
 
-```sh
+```bash
 curl -X POST http://localhost:4001/v1/messages \
   -H "x-api-key: ollama" \
   -H "Content-Type: application/json" \
@@ -215,9 +190,9 @@ curl -X POST http://localhost:4001/v1/messages \
   }'
 ```
 
-Send a message (streaming):
+### Streaming
 
-```sh
+```bash
 curl -N -X POST http://localhost:4001/v1/messages \
   -H "x-api-key: ollama" \
   -H "Content-Type: application/json" \
@@ -229,9 +204,9 @@ curl -N -X POST http://localhost:4001/v1/messages \
   }'
 ```
 
-Count tokens (local estimation):
+### Count Tokens
 
-```sh
+```bash
 curl -X POST http://localhost:4001/v1/messages/count_tokens \
   -H "x-api-key: ollama" \
   -H "Content-Type: application/json" \
@@ -241,120 +216,141 @@ curl -X POST http://localhost:4001/v1/messages/count_tokens \
   }'
 ```
 
-## Project Structure
+---
 
-```
-7-bridges-of-claude/
-├── src/seven_bridges/
-│   ├── main.py              # FastAPI app & routing
-│   ├── config.py            # Settings, env vars, model routing
-│   ├── debug.py             # Request/response JSONL logging
-│   ├── models/
-│   │   ├── anthropic.py     # Anthropic Messages API Pydantic models
-│   │   └── openai.py        # OpenAI Chat Completions Pydantic models
-│   ├── backends/
-│   │   ├── base.py          # Abstract Bridge base class + capabilities
-│   │   ├── deepseek.py      # DeepSeek bridge
-│   │   ├── kimi.py          # Kimi bridge
-│   │   ├── fireworks.py     # Fireworks AI bridge
-│   │   ├── ollama.py        # Ollama bridge
-│   │   └── siliconflow.py   # SiliconFlow bridge
-│   └── translation/
-│       ├── request.py       # Anthropic → OpenAI request translation
-│       ├── response.py      # OpenAI → Anthropic response translation
-│       └── stream.py        # OpenAI SSE → Anthropic SSE streaming
-├── tests/
-│   ├── test_translation.py      # Unit tests for request/response conversion
-│   ├── test_streaming.py        # Unit tests for SSE event generation
-│   ├── test_e2e.py              # E2E tests with mocked upstreams
-│   ├── test_smoke.py            # Smoke tests for API basics
-│   ├── test_smoke_streaming.py  # Live streaming smoke tests (hits real APIs)
-│   ├── test_debug.py            # Debug middleware tests
-│   └── agent-inference/         # Integration tests against live upstreams
-│       ├── fixtures.json        # 5 test scenarios with evaluation criteria
-│       ├── test_agent_inference.py  # Parametrized: 3 models × 5 fixtures
-│       └── README.md            # How the evaluation framework works
-├── docs/api-schemas/        # Reference OpenAPI specs
-├── Makefile                 # Test, lint, format targets
-└── ecosystem.config.js      # PM2 process config
+## Logging
+
+### Debug Logging
+
+Every request/response is logged to `logs/debug/<session_id>.jsonl` when `BRIDGE_DEBUG=1` is set:
+
+```bash
+make run-debug    # start with debug logging
+make tail-logs    # tail the latest log with jq formatting
 ```
 
-## Debug Logging
+For log structure, filtering examples, and log rotation, see [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
 
-Every request/response pair is written to `logs/debug/<session_id>.jsonl` when `BRIDGE_DEBUG=1` is set.
+### Usage Logging
 
-```sh
-# Run the server with debug logging enabled
-make run-debug
+Every successful chat completion is automatically logged to `logs/usage.jsonl` with token counts and request metadata. Always on, no config needed.
 
-# In another terminal, tail the latest log with jq formatting
-make tail-logs
+```bash
+cd logs && tail -n 5 usage.jsonl | jq .
 ```
 
-Each JSONL file contains:
+For query examples, log rotation, and the full field reference, see [`docs/USAGE_LOG.md`](docs/USAGE_LOG.md).
 
-| Entry | Description |
-|---|---|
-| `request` | Method, path, headers, parsed request body |
-| `stream_body` | Full raw SSE text (for streaming responses) |
-| `response` | Status code, duration, headers, body (or `<streaming_response: N bytes>`) |
+---
 
-**Log truncation:** Large request bodies (over 50 KB) are summarized instead of logged verbatim. Stream bodies are also capped. This prevents multi-megabyte debug logs when sending large files.
+## Troubleshooting
 
-Example — read the last 10 entries of the most recent log:
+### "command not found: uv"
 
-```sh
-cd logs/debug && tail -n 10 $(ls -t *.jsonl | head -1) | jq .
+`uv` is not installed. See [GETTING_STARTED.md](docs/GETTING_STARTED.md#platform-specific-setup) for install instructions.
+
+### "Failed to connect" on port 4001
+
+The bridge server is not running. Start it:
+
+```bash
+uvicorn seven_bridges.main:app --reload --port 4001
 ```
 
-Filter for just the requests:
+### "401 Unauthorized"
 
-```sh
-cd logs/debug && cat $(ls -t *.jsonl | head -1) | jq 'select(.type=="request")'
+`ANTHROPIC_API_KEY` (in Claude Code's env) must exactly match `BRIDGE_API_KEY` (in the bridge's env).
+
+### Claude Code still talks to Anthropic
+
+Claude Code caches the base URL. After changing `ANTHROPIC_BASE_URL`, fully quit and restart:
+
+```bash
+/quit   # inside Claude Code
+# then in your terminal:
+export ANTHROPIC_BASE_URL="http://localhost:4001"
+claude
 ```
 
-Filter for errors only:
+> **More issues?** See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for the full guide.
 
-```sh
-cd logs/debug && cat $(ls -t *.jsonl | head -1) | jq 'select(.status_code >= 400)'
-```
+---
 
 ## Development
 
-Run all checks:
-
-```sh
+```bash
 make check       # lint + test
 make test-cov    # tests with coverage report
-```
-
-Individual targets:
-
-```sh
-make test-unit   # translation + streaming unit tests
-make test-e2e    # mocked upstream e2e tests
-make test-smoke  # API smoke tests
 make lint        # ruff + mypy
 make format      # ruff format
 ```
 
-Pre-commit hooks (runs on every commit):
+Pre-commit hooks: `pre-commit install`
 
-```sh
-pre-commit install
+156 tests, ~82% coverage. See [`CLAUDE.md`](CLAUDE.md) for development conventions.
+
+---
+
+## Architecture
+
+For a deep dive into the translation pipeline, content block mapping, streaming state machine, and how to add a new backend, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+Brief overview:
+
+```
+src/seven_bridges/
+├── main.py              # FastAPI app & routing
+├── config.py            # Settings, env vars, model routing
+├── debug.py             # Request/response JSONL logging
+├── usage_log.py         # Per-request token usage logging
+├── models/
+│   ├── anthropic.py     # Anthropic Messages API Pydantic models
+│   └── openai.py        # OpenAI Chat Completions Pydantic models
+├── backends/
+│   ├── base.py          # Abstract Bridge base class + capabilities
+│   ├── deepseek.py      # DeepSeek bridge
+│   ├── kimi.py          # Kimi bridge
+│   ├── fireworks.py     # Fireworks AI bridge
+│   ├── ollama.py        # Ollama bridge
+│   └── siliconflow.py   # SiliconFlow bridge
+└── translation/
+    ├── request.py       # Anthropic -> OpenAI request translation
+    ├── response.py      # OpenAI -> Anthropic response translation
+    └── stream.py        # OpenAI SSE -> Anthropic SSE streaming
 ```
 
-Includes: gitleaks, ruff check, ruff format, mypy, pytest with 80% coverage gate.
+---
 
-## Tests
+## Project Structure
 
-120 tests, ~82% coverage:
+```
+7-bridges-of-claude/
+├── src/seven_bridges/         # Main source code
+├── tests/                     # All tests
+│   ├── test_translation.py    # Unit tests for request/response conversion
+│   ├── test_streaming.py      # Unit tests for SSE event generation
+│   ├── test_e2e.py            # E2E tests with mocked upstreams
+│   ├── test_smoke.py          # Smoke tests for API basics
+│   ├── test_debug.py          # Debug middleware tests
+│   ├── test_usage_log.py      # Usage logging tests
+│   └── agent-inference/       # Integration tests against live upstreams
+├── docs/                      # Documentation
+│   ├── ARCHITECTURE.md        # Technical deep dive
+│   ├── GETTING_STARTED.md     # Detailed platform and backend guides
+│   ├── BRIDGE_NOTES.md        # Per-bridge behavior details
+│   ├── USAGE_LOG.md           # Usage logging reference and queries
+│   ├── TROUBLESHOOTING.md     # Full troubleshooting guide
+│   ├── VISION_FALLBACK.md     # Experimental vision feature
+│   ├── OLLAMA_MODELS.md       # Ollama model reference
+│   └── api-schemas/           # API schema references
+├── Makefile                   # Common commands (test, lint, start, etc.)
+├── pyproject.toml             # Python project config & dependencies
+├── ecosystem.config.js        # PM2 process config
+├── .envrc.example             # Example environment variables
+└── README.md                  # This file
+```
 
-- **Unit**: Request/response field mapping, content block conversion, streaming event generation
-- **E2E**: Full HTTP round-trips with mocked DeepSeek, Kimi, SiliconFlow, Fireworks AI, and Ollama APIs using `respx`
-- **Smoke**: Health, auth, model listing, validation errors
-- **Debug**: Middleware request/response capture
-- **Vision fallback**: Image description extraction and VL round-trips
+---
 
 ## License
 

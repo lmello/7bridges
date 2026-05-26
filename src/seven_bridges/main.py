@@ -188,6 +188,36 @@ async def messages(
     request.state.bridge_name = route.bridge
     request.state.resolved_backend_model = route.backend_model
 
+    # Build rich usage context for cost analysis
+    api_key = x_api_key or authorization.replace("Bearer ", "")
+    thinking = anthropic_request.thinking or {}
+    thinking_type = thinking.get("type") if thinking else None
+    tools = anthropic_request.tools or []
+    bridge.usage_context = {
+        "session_id": request.headers.get("x-claude-code-session-id"),
+        "client_app": request.headers.get("x-app")
+        or (
+            "cli" if "claude-cli" in (request.headers.get("user-agent") or "")
+            else None
+        ),
+        "user_agent": request.headers.get("user-agent"),
+        "api_key_prefix": api_key[:8] if api_key else None,
+        "stream": bool(anthropic_request.stream),
+        "max_tokens": anthropic_request.max_tokens,
+        "thinking_enabled": thinking_type in ("enabled", "adaptive"),
+        "thinking_budget": (anthropic_request.output_config or {}).get("effort")
+        if anthropic_request.output_config
+        else None,
+        "tool_count": len(tools),
+        "tool_names": [t.name for t in tools],
+        "message_count": len(anthropic_request.messages),
+        "has_images": request_has_images(anthropic_request),
+        "has_video": request_has_video(anthropic_request),
+        "temperature": anthropic_request.temperature,
+        "top_p": anthropic_request.top_p,
+        "client_metadata": anthropic_request.metadata,
+    }
+
     # Validate request against vendor capabilities
     has_images = request_has_images(anthropic_request)
     has_video = request_has_video(anthropic_request)
