@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.12.0 (2026-05-27)
+
+### Features
+
+- Add per-backend/model pricing overrides in config.py with fallback
+  ([`fa3ee33`](https://github.com/sdkks/7bridges/commit/fa3ee335de528b4f71307cd1ac1df01aedae7b54))
+
+- Per-model pricing, log rotation, cache keys, and historical data
+  ([`fa3ee33`](https://github.com/sdkks/7bridges/commit/fa3ee335de528b4f71307cd1ac1df01aedae7b54))
+
+
 ## v1.11.2 (2026-05-27)
 
 ### Bug Fixes
