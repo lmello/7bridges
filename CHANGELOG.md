@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.11.2 (2026-05-27)
+
+### Bug Fixes
+
+- **dashboard**: Resolve three rendering and interaction bugs
+  ([`634d989`](https://github.com/sdkks/7bridges/commit/634d9894088d7b1106cb5372298b6477e4fa1338))
+
+
 ## v1.11.1 (2026-05-27)
 
 ### Bug Fixes
