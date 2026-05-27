@@ -4,11 +4,21 @@
 """FastAPI dashboard application for 7-bridges usage metrics."""
 
 from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .reader import compute_stats
 
 app = FastAPI(title="7 Bridges Dashboard", version="0.2.0")
+
+
+@app.get("/favicon.svg")
+def favicon() -> Response:
+    """Serve the 7B favicon."""
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#161b22"/>
+  <text x="16" y="23" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18" font-weight="700" fill="#d4a5ff">7B</text>
+</svg>"""
+    return Response(content=svg, media_type="image/svg+xml")
 
 
 @app.get("/health")
@@ -35,6 +45,7 @@ _DASHBOARD_HTML = r"""<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>7 Bridges Dashboard</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
 *, *::before, *::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.5;min-height:100vh}
@@ -52,6 +63,8 @@ header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;disp
 .pill:hover{background:#30363d;border-color:#d4a5ff}
 .pill.active{background:#d4a5ff20;border-color:#d4a5ff;color:#d4a5ff;font-weight:600}
 .updated{display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#8b949e}
+.refresh-label{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em}
+#refresh-select{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:2px 6px;border-radius:4px;font-size:0.72rem}
 .updated .dot{width:8px;height:8px;border-radius:50%}
 .updated .dot.ok{background:#3fb950}
 .updated .dot.error{background:#f85149}
@@ -119,6 +132,14 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
   <div class="header-right">
     <div class="filter-pills" id="filter-pills"></div>
     <div class="updated">
+      <label for="refresh-select" class="refresh-label">Refresh</label>
+      <select id="refresh-select" onchange="changeRefresh()">
+        <option value="0">Off</option>
+        <option value="30000">30s</option>
+        <option value="60000" selected>60s</option>
+        <option value="600000">10m</option>
+        <option value="3600000">1h</option>
+      </select>
       <span class="dot ok" id="status-dot"></span>
       <span class="ts" id="last-updated">--</span>
     </div>
@@ -748,9 +769,20 @@ function fetchStats(){
     });
 }
 
-// Initial fetch + auto-refresh
+// Auto-refresh with configurable interval
+var refreshMs = 60000;
+var refreshTimer = null;
+
+function changeRefresh(){
+  var sel = document.getElementById('refresh-select');
+  refreshMs = parseInt(sel.value, 10);
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (refreshMs > 0) refreshTimer = setInterval(fetchStats, refreshMs);
+}
+
+// Initial fetch + start auto-refresh
 fetchStats();
-setInterval(fetchStats, 10000);
+refreshTimer = setInterval(fetchStats, refreshMs);
 
 // Redraw charts on resize
 var resizeTimer;
