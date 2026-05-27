@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.11.1 (2026-05-27)
+
+### Bug Fixes
+
+- **ollama**: Prevent hangs with HTTP timeout and stream cancellation cleanup
+  ([`c17ea02`](https://github.com/sdkks/7bridges/commit/c17ea02ece0ca54a2249e0445d8ee919570f60ab))
+
+### Documentation
+
+- **dashboard**: What's new
+  ([`5f81a4d`](https://github.com/sdkks/7bridges/commit/5f81a4dd701ab2bdbc35eab656e1c35cd4c9448f))
+
+
 ## v1.11.0 (2026-05-27)
 
 ### Bug Fixes
