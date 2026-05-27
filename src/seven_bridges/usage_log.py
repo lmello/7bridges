@@ -9,21 +9,70 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from seven_bridges.config import get_pricing
+
 USAGE_LOG_PATH = Path(__file__).parent.parent.parent / "logs" / "usage.jsonl"
 
+_MAX_LOG_BYTES = 10 * 1024 * 1024  # 10 MB
+_MAX_ROTATED_LOG_FILES = 5
 
-def _compute_cost(usage: dict[str, Any]) -> float:
+
+def _rotate_if_needed(path: Path, max_bytes: int, keep_count: int) -> None:
+    """Rotate a log file if it exceeds max_bytes using file renaming.
+
+    Rotated files are named {stem}.1{suffix}, {stem}.2{suffix}, etc.
+    File renaming preserves in-flight reads since file descriptors on the
+    old inode remain valid.
+    """
+    try:
+        if not path.exists():
+            return
+        if path.stat().st_size < max_bytes:
+            return
+        if keep_count < 1:
+            return
+
+        # Remove the oldest rotated file
+        oldest = path.with_suffix(f".{keep_count}{path.suffix}")
+        oldest.unlink(missing_ok=True)
+
+        # Shift existing rotated files (N-1 -> N, descending)
+        for i in range(keep_count - 1, 0, -1):
+            src = path.with_suffix(f".{i}{path.suffix}")
+            dst = path.with_suffix(f".{i + 1}{path.suffix}")
+            if src.exists():
+                src.rename(dst)
+
+        # Rename current file to .1
+        path.rename(path.with_suffix(f".1{path.suffix}"))
+    except OSError:
+        pass  # Best-effort rotation; never break a request
+
+
+def _compute_cost(
+    usage: dict[str, Any],
+    backend: str | None = None,
+    model_alias: str | None = None,
+) -> float:
     """Compute estimated cost in USD from usage statistics.
 
-    Pricing (per 1M tokens):
-      - input tokens: $0.40
-      - output tokens: $4.00
-      - cache read tokens: $0.15
+    Looks up per-backend / per-model pricing via ``seven_bridges.config.get_pricing``
+    and falls back to the global default when no override is configured.
     """
+    pricing = get_pricing(backend, model_alias)
     input_tokens: int = usage.get("prompt_tokens", 0)
     output_tokens: int = usage.get("completion_tokens", 0)
-    cache_read_tokens: int = usage.get("prompt_cache_hit_tokens") or usage.get("cached_tokens") or 0
-    cost = (input_tokens * 0.40 + output_tokens * 4.00 + cache_read_tokens * 0.15) / 1_000_000
+    cache_read_tokens: int = (
+        usage.get("prompt_cache_hit_tokens")
+        or usage.get("cached-prompt-tokens")
+        or usage.get("cached_tokens")
+        or 0
+    )
+    cost = (
+        input_tokens * pricing["input"]
+        + output_tokens * pricing["output"]
+        + cache_read_tokens * pricing["cache_read"]
+    ) / 1_000_000
     return round(cost, 6)
 
 
@@ -48,7 +97,7 @@ def _log_usage(
     stream: bool,
     max_tokens: int | None,
     thinking_enabled: bool | None,
-    thinking_budget: str | None,
+    thinking_budget: int | str | None,
     tool_count: int,
     tool_names: list[str],
     message_count: int,
@@ -109,6 +158,7 @@ def _log_usage(
             "client_metadata": client_metadata,
         }
         USAGE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _rotate_if_needed(USAGE_LOG_PATH, _MAX_LOG_BYTES, _MAX_ROTATED_LOG_FILES)
         with open(USAGE_LOG_PATH, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
     except Exception:

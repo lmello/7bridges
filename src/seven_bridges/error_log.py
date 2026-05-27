@@ -9,9 +9,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from seven_bridges.usage_log import _rotate_if_needed
+
 ERROR_LOG_PATH = Path(__file__).parent.parent.parent / "logs" / "errors.jsonl"
 
 _MAX_MESSAGE_LEN = 500
+_MAX_LOG_BYTES = 10 * 1024 * 1024  # 10 MB
+_MAX_ROTATED_LOG_FILES = 5
 
 
 def log_error(
@@ -59,6 +63,7 @@ def log_error(
         entry.update(extra)
 
         ERROR_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _rotate_if_needed(ERROR_LOG_PATH, _MAX_LOG_BYTES, _MAX_ROTATED_LOG_FILES)
         with open(ERROR_LOG_PATH, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
     except Exception:

@@ -78,6 +78,7 @@ class ChatCompletionRequest(BaseModel):
     frequency_penalty: float | None = None
     user: str | None = None
     stream_options: StreamOptions | None = None
+    prompt_cache_key: str | None = None
     reasoning_effort: str | None = None
     thinking: dict[str, Any] | None = None
     enable_thinking: bool | None = None

@@ -114,7 +114,7 @@ class Bridge(ABC):
         if not ctx:
             return
         latency_ms = self.stop_timer()
-        cost = _compute_cost(usage)
+        cost = _compute_cost(usage, backend=self.name, model_alias=self.model_alias)
         cache_hit_rate = _compute_cache_hit_rate(usage)
         _log_usage(
             bridge_name=self.name,

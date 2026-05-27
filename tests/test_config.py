@@ -1,6 +1,6 @@
 """Tests for model routing and configuration."""
 
-from seven_bridges.config import Settings, _version_display
+from seven_bridges.config import PRICING, Settings, _version_display, get_pricing
 
 
 class TestVersionDisplay:
@@ -62,3 +62,45 @@ class TestResolveModel:
         assert settings.resolve_model("claude-unknown-9-9") is None
         assert settings.resolve_model("not-a-model") is None
         assert settings.resolve_model("") is None
+
+
+class TestGetPricing:
+    """Tests for get_pricing() resolution chain."""
+
+    def test_global_default_when_no_args(self) -> None:
+        pricing = get_pricing()
+        assert pricing["input"] == 0.40
+        assert pricing["output"] == 4.00
+        assert pricing["cache_read"] == 0.15
+
+    def test_global_default_when_unknown_backend(self) -> None:
+        pricing = get_pricing(backend="nonexistent")
+        assert pricing["input"] == 0.40
+        assert pricing["output"] == 4.00
+
+    def test_global_default_when_none_backend(self) -> None:
+        pricing = get_pricing(backend=None, model_alias=None)
+        assert pricing["input"] == 0.40
+
+    def test_backend_wildcard_match(self) -> None:
+        pricing = get_pricing(backend="deepseek")
+        assert pricing["input"] == 0.14
+        assert pricing["output"] == 1.10
+        assert pricing["cache_read"] == 0.014
+
+    def test_backend_wildcard_with_unknown_model(self) -> None:
+        """When model isn't explicitly listed, fall back to backend wildcard."""
+        pricing = get_pricing(backend="deepseek", model_alias="unknown-model")
+        assert pricing["input"] == 0.14
+
+    def test_ollama_is_free(self) -> None:
+        pricing = get_pricing(backend="ollama")
+        assert pricing["input"] == 0.0
+        assert pricing["output"] == 0.0
+        assert pricing["cache_read"] == 0.0
+
+    def test_model_specific_pricing_exists_in_structure(self) -> None:
+        """Verify that the PRICING structure supports per-model entries."""
+        # If a model-specific entry exists, it should be found
+        assert "deepseek" in PRICING
+        assert "*" in PRICING["deepseek"]

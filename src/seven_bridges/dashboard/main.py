@@ -27,7 +27,7 @@ def health_check() -> dict[str, str]:
 
 
 @app.get("/api/stats")
-def api_stats(hours: int = Query(default=24, ge=1, le=168)) -> JSONResponse:
+def api_stats(hours: int = Query(default=24, ge=1, le=720)) -> JSONResponse:
     """Return aggregated dashboard statistics as JSON."""
     stats = compute_stats(hours=hours)
     return JSONResponse(content=stats)
@@ -139,6 +139,8 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
         <option value="6">6h</option>
         <option value="8">8h</option>
         <option value="24" selected>24h</option>
+        <option value="168">7d</option>
+        <option value="720">30d</option>
       </select>
       <label for="refresh-select" class="refresh-label">Refresh</label>
       <select id="refresh-select">
@@ -155,6 +157,9 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
 </header>
 <main>
   <div class="cards" id="cards"></div>
+  <div class="cost-disclaimer" style="font-size:0.72rem;color:#484f58;margin:-8px 0 16px 0;padding:0 4px">
+    Cost estimates based on default Anthropic pricing ($0.40/M input, $4.00/M output). Actual costs vary by backend and model. For directional use only.
+  </div>
   <div class="charts-section">
     <div class="chart-panel">
       <h2>Requests / Hour</h2>

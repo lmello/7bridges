@@ -47,6 +47,9 @@ class DeepSeekBridge(Bridge):
         self.start_timer()
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.model = self.backend_model
+        openai_request.prompt_cache_key = (
+            self.usage_context.get("session_id") if self.usage_context else None
+        )
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -88,6 +91,9 @@ class DeepSeekBridge(Bridge):
         self.start_timer()
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.model = self.backend_model
+        openai_request.prompt_cache_key = (
+            self.usage_context.get("session_id") if self.usage_context else None
+        )
         openai_request.stream = True
         from seven_bridges.models.openai import StreamOptions
 

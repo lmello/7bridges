@@ -4,6 +4,38 @@ import os
 import re
 from dataclasses import dataclass, replace
 
+# ── Pricing ─────────────────────────────────────────────────────────────
+# Per-backend and per-model pricing overrides.  Prices are USD per 1M tokens.
+# Resolution order: (backend, model) → (backend, *) → (*> *)
+PRICING: dict[str, dict[str, dict[str, float]]] = {
+    "deepseek": {
+        "*": {"input": 0.14, "output": 1.10, "cache_read": 0.014},
+    },
+    "ollama": {
+        "*": {"input": 0.0, "output": 0.0, "cache_read": 0.0},
+    },
+    "*": {
+        "*": {"input": 0.40, "output": 4.00, "cache_read": 0.15},
+    },
+}
+
+
+def get_pricing(backend: str | None = None, model_alias: str | None = None) -> dict[str, float]:
+    """Resolve pricing for a given backend and optional model alias.
+
+    Fallback chain:
+      1. Exact (backend, model_alias) match
+      2. Backend-level wildcard  ``(backend, "*")``
+      3. Global wildcard          ``("*", "*")``
+    """
+    if backend and backend in PRICING:
+        backend_pricing = PRICING[backend]
+        if model_alias and model_alias in backend_pricing:
+            return backend_pricing[model_alias]
+        if "*" in backend_pricing:
+            return backend_pricing["*"]
+    return PRICING["*"]["*"]
+
 
 @dataclass(frozen=True)
 class ModelRoute:
