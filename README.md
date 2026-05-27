@@ -1,5 +1,7 @@
 # 7 Bridges of Claude
 
+[![Release](https://github.com/sdkks/7bridges/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/sdkks/7bridges/actions/workflows/release.yml)
+
 An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy that lets **Claude Code** (and other Anthropic clients) talk to non-Anthropic LLMs through clean, explicit translations.
 
 > **Agentic development guide:** See [`CLAUDE.md`](CLAUDE.md) (also symlinked as [`AGENTS.md`](AGENTS.md)) for conventions on testing integrity, development cadence, backend capability audits, and common pitfalls when working with this codebase.
@@ -12,6 +14,23 @@ Added support for SiliconFlow (MiniMax M2.5, Kimi K2.6, GLM 5.1), Fireworks AI (
 https://github.com/user-attachments/assets/8e6fa365-d528-4307-ad36-61fa040a4cc2
 
 
+
+## Table of Contents
+
+- [Why I Built This](#why-i-built-this)
+- [What You Need](#what-you-need)
+- [Quick Start (5 Minutes)](#quick-start-5-minutes)
+- [Pick a Model](#pick-a-model)
+- [Run It](#run-it)
+- [Usage Examples](#usage-examples)
+- [Logging](#logging)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [License](#license)
+
+---
 
 ## Why I Built This
 
@@ -36,13 +55,20 @@ Every non-Anthropic model speaks the **Anthropic Messages API** (`/v1/messages`)
 
 ## Architecture
 
-```
-┌─────────────┐     Anthropic API      ┌──────────────┐     Native API      ┌────────────┐
-│ Claude Code │ ──── /v1/messages ───▶ │ 7 Bridges    │ ──── /chat/ ─────▶ │ DeepSeek   │
-│  (or any    │ ◀───  (responses) ──── │  (proxy)     │ ◀─── completions ──│ Kimi       │
-│  Anthropic  │                        │  :4001       │                    │ ...        │
-│  client)    │                        │              │                    │            │
-└─────────────┘                        └──────────────┘                    └────────────┘
+```mermaid
+flowchart LR
+    CC[Claude Code] -->|Anthropic API| B[7 Bridges :4001]
+    B -->|OpenAI API| DS[DeepSeek]
+    B -->|OpenAI API| K[Kimi]
+    B -.->|OpenAI API| F[Future vendor...]
+
+    subgraph "Translation Layer"
+        direction TB
+        R[request.py] --> S[stream.py]
+        R --> RP[response.py]
+    end
+
+    B --> Translation
 ```
 
 Each backend is a "bridge":
@@ -68,12 +94,12 @@ Each backend is a "bridge":
 
 ### Model Aliases
 
-| Alias | Backend | Model | Context | Max Output |
+| Alias | Backend | Actual Model | Context | Max Output |
 |---|---|---|---|---|
 | `claude-sonnet-4-6` | DeepSeek | `deepseek-v4-pro` | 1,048,576 | 393,216 |
 | `claude-haiku-4-5` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
 | `claude-opus-4-6` | Kimi | `kimi-for-coding` | 262,144 | 32,768 |
-| `claude-haiku-4-5-20251001` | DeepSeek | `deepseek-v4-flash` | 1,048,576 | 393,216 |
+| `claude-opus-4-7` | Kimi | `kimi-for-coding` | 262,144 | 32,768 |
 | `ollama-sonnet` | Ollama | `qwen3.6:35b-a3b-coding-nvfp4` | 32,768 | 8,192 |
 | `ollama-haiku` | Ollama | `qwen3.5:9b` | 65,536 | 8,192 |
 | `ollama-gpt-oss` | Ollama | `gpt-oss:20b` | 65,536 | 8,192 |
@@ -102,6 +128,8 @@ Each backend is a "bridge":
 **Fireworks AI (`fireworks-kimi-k2p6`, `fireworks-minimax-m2p7`)**
 
 - **Thinking / reasoning:** Kimi K2.6 via Fireworks accepts the Anthropic-compatible `thinking` object with `type` and `budget_tokens`. MiniMax M2.7 only accepts `reasoning_effort` string (`low`/`medium`/`high`); the bridge converts accordingly.
+
+> **Full details:** See [`docs/BRIDGE_NOTES.md`](docs/BRIDGE_NOTES.md) for vision support, known quirks, and free tier notes.
 
 ## Ollama Setup
 
@@ -146,65 +174,115 @@ Ollama models use the aliases `ollama-sonnet`, `ollama-haiku`, `ollama-gpt-oss`,
 
 See [`docs/OLLAMA_MODELS.md`](docs/OLLAMA_MODELS.md) for full capabilities, architecture details, and per-model notes.
 
-## Setup
+---
 
-```sh
+## What You Need
+
+| Requirement | What It Is | How to Check |
+|---|---|---|
+| **Python 3.13+** | The programming language this tool is written in | `python3 --version` |
+| **uv** | A fast Python package manager | `uv --version` |
+| **Git** | To download this project | `git --version` |
+| **An API key** | From at least one backend provider | See below |
+
+**You do NOT need all of these.** Pick one backend and get one API key. Many are free to try with credit.
+
+> **Windows users:** This project runs on Linux and macOS. Use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and follow the Linux instructions.
+
+---
+
+## Quick Start (5 Minutes)
+
+If you already have `uv` installed and an API key ready:
+
+```bash
+# 1. Download the project
+git clone https://github.com/sdkks/7bridges.git
+cd 7bridges
+
+# 2. Create the Python environment and install dependencies
 uv venv --python 3.13
 source .venv/bin/activate
 uv pip install -e ".[dev]"
-```
 
-Set your upstream API keys:
+# 3. Set your API key (example: DeepSeek)
+export DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+export BRIDGE_API_KEY="ollama"  # this is the password Claude Code will use
 
-```sh
-export DEEPSEEK_API_KEY="sk-..."
-export KIMI_CODE_API_KEY="sk-..."
-export SILICONFLOW_API_KEY="sk-..."
-export FIREWORKSAI_API_KEY="sk-..."
-export BRIDGE_API_KEY="ollama"  # or whatever you want Claude Code to send
-```
-
-**Auto-loading with direnv** (optional):
-
-```sh
-cp .envrc.example .envrc
-# edit .envrc and fill in your API keys
-direnv allow
-```
-
-This automatically exports the env vars and adds `.venv/bin` to `PATH` whenever you `cd` into the project.
-
-Run via PM2 (production) or directly (development):
-
-```sh
-# Production
-make start
-
-# Development with debug logging
-make run-debug
-
-# Development (basic)
+# 4. Start the server
 uvicorn seven_bridges.main:app --reload --port 4001
 ```
 
-Point Claude Code at the bridge:
+In another terminal:
 
-```sh
+```bash
+# 5. Point Claude Code at the bridge
 export ANTHROPIC_BASE_URL="http://localhost:4001"
 export ANTHROPIC_API_KEY="ollama"
+claude
 ```
 
-## Usage
+Then inside Claude Code, pick a model:
 
-List available models:
+```
+/model claude-sonnet-4-6
+```
 
-```sh
+Done! To verify it's working, try:
+
+```bash
+curl http://localhost:4001/v1/models
+curl -X POST http://localhost:4001/v1/messages \
+  -H "x-api-key: ollama" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-sonnet-4-6", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 10}'
+```
+
+> **New here?** See [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) for a full step-by-step walkthrough with platform-specific instructions (macOS, Linux, WSL2), per-backend setup guides, and environment variable explanations.
+
+---
+
+## Pick a Model
+
+**New to this?** Start here:
+
+| If you want... | Use this alias | Backend | Cost | Notes |
+|---|---|---|---|---|
+| Best overall quality | `claude-opus-4-6` | Kimi K2.6 | Paid | Excellent reasoning, vision, tools. 262K context. |
+| Fast and cheap | `claude-haiku-4-5` | DeepSeek v4-flash | Paid | Very fast, 1M context, great for quick tasks. |
+| Good balance | `claude-sonnet-4-6` | DeepSeek v4-pro | Paid | Strong reasoning, 1M context, cheaper than Kimi. |
+| Completely free | `ollama-sonnet` | Local Qwen 3.6 | Free | Runs on your computer. Needs ~32GB RAM. |
+| Free, lighter | `ollama-haiku` | Local Qwen 3.5 | Free | Runs on your computer. Needs ~16GB RAM. |
+
+**Full model alias reference:** See the [Model Aliases](#model-aliases) table above.
+
+> **Per-bridge details:** Thinking/reasoning behavior, vision support, and known quirks for each backend are documented in [`docs/BRIDGE_NOTES.md`](docs/BRIDGE_NOTES.md).
+
+---
+
+## Run It
+
+| Command | When to Use |
+|---|---|
+| `uvicorn seven_bridges.main:app --reload --port 4001` | Development — auto-reloads on code changes |
+| `make run-debug` | Debugging — logs every request/response to `logs/debug/` |
+| `make start` | Production — uses PM2, restarts on crash |
+| `make stop` | Stop the PM2 process |
+| `make logs` | Tail PM2 logs in real time |
+
+---
+
+## Usage Examples
+
+### List Available Models
+
+```bash
 curl http://localhost:4001/v1/models
 ```
 
-Send a message (non-streaming):
+### Send a Message
 
-```sh
+```bash
 curl -X POST http://localhost:4001/v1/messages \
   -H "x-api-key: ollama" \
   -H "Content-Type: application/json" \
@@ -215,9 +293,9 @@ curl -X POST http://localhost:4001/v1/messages \
   }'
 ```
 
-Send a message (streaming):
+### Streaming
 
-```sh
+```bash
 curl -N -X POST http://localhost:4001/v1/messages \
   -H "x-api-key: ollama" \
   -H "Content-Type: application/json" \
@@ -229,9 +307,9 @@ curl -N -X POST http://localhost:4001/v1/messages \
   }'
 ```
 
-Count tokens (local estimation):
+### Count Tokens
 
-```sh
+```bash
 curl -X POST http://localhost:4001/v1/messages/count_tokens \
   -H "x-api-key: ollama" \
   -H "Content-Type: application/json" \
@@ -241,6 +319,96 @@ curl -X POST http://localhost:4001/v1/messages/count_tokens \
   }'
 ```
 
+---
+
+## Logging
+
+### Debug Logging
+
+Every request/response is logged to `logs/debug/<session_id>.jsonl` when `BRIDGE_DEBUG=1` is set:
+
+```bash
+make run-debug    # start with debug logging
+make tail-logs    # tail the latest log with jq formatting
+```
+
+For log structure, filtering examples, and log rotation, see [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
+
+### Usage Logging
+
+Every successful chat completion is automatically logged to `logs/usage.jsonl` with token counts and request metadata. Always on, no config needed.
+
+```bash
+cd logs && tail -n 5 usage.jsonl | jq .
+```
+
+For query examples, log rotation, and the full field reference, see [`docs/USAGE_LOG.md`](docs/USAGE_LOG.md).
+
+---
+
+## Troubleshooting
+
+### "command not found: uv"
+
+`uv` is not installed. See [GETTING_STARTED.md](docs/GETTING_STARTED.md#platform-specific-setup) for install instructions.
+
+### "Failed to connect" on port 4001
+
+The bridge server is not running. Start it:
+
+```bash
+uvicorn seven_bridges.main:app --reload --port 4001
+```
+
+### "401 Unauthorized"
+
+`ANTHROPIC_API_KEY` (in Claude Code's env) must exactly match `BRIDGE_API_KEY` (in the bridge's env).
+
+### Claude Code still talks to Anthropic
+
+Claude Code caches the base URL. After changing `ANTHROPIC_BASE_URL`, fully quit and restart:
+
+```bash
+/quit   # inside Claude Code
+# then in your terminal:
+export ANTHROPIC_BASE_URL="http://localhost:4001"
+claude
+```
+
+> **More issues?** See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for the full guide.
+
+---
+
+## Development
+
+```bash
+make check       # lint + test
+make test-cov    # tests with coverage report
+make lint        # ruff + mypy
+make format      # ruff format
+```
+
+Pre-commit hooks: `pre-commit install`
+
+Runs the full test suite with an 80% coverage gate. See [`CLAUDE.md`](CLAUDE.md) for development conventions.
+
+## Tests
+
+- **Unit**: Request/response field mapping, content block conversion, streaming event generation
+- **E2E**: Full HTTP round-trips with mocked DeepSeek, Kimi, SiliconFlow, Fireworks AI, and Ollama APIs using `respx`
+- **Smoke**: Health, auth, model listing, validation errors
+- **Debug**: Middleware request/response capture
+- **Vision fallback**: Image description extraction and VL round-trips
+- **Usage logging**: Per-request token count persistence and field coverage
+
+---
+
+## Architecture
+
+For a deep dive into the translation pipeline, content block mapping, streaming state machine, and how to add a new backend, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
+
 ## Project Structure
 
 ```
@@ -249,6 +417,7 @@ curl -X POST http://localhost:4001/v1/messages/count_tokens \
 │   ├── main.py              # FastAPI app & routing
 │   ├── config.py            # Settings, env vars, model routing
 │   ├── debug.py             # Request/response JSONL logging
+│   ├── usage_log.py         # Per-request token usage logging
 │   ├── models/
 │   │   ├── anthropic.py     # Anthropic Messages API Pydantic models
 │   │   └── openai.py        # OpenAI Chat Completions Pydantic models
@@ -268,93 +437,29 @@ curl -X POST http://localhost:4001/v1/messages/count_tokens \
 │   ├── test_streaming.py        # Unit tests for SSE event generation
 │   ├── test_e2e.py              # E2E tests with mocked upstreams
 │   ├── test_smoke.py            # Smoke tests for API basics
-│   ├── test_smoke_streaming.py  # Live streaming smoke tests (hits real APIs)
 │   ├── test_debug.py            # Debug middleware tests
+│   ├── test_usage_log.py        # Usage logging tests
 │   └── agent-inference/         # Integration tests against live upstreams
-│       ├── fixtures.json        # 5 test scenarios with evaluation criteria
-│       ├── test_agent_inference.py  # Parametrized: 3 models × 5 fixtures
-│       └── README.md            # How the evaluation framework works
-├── docs/api-schemas/        # Reference OpenAPI specs
-├── Makefile                 # Test, lint, format targets
-└── ecosystem.config.js      # PM2 process config
+│       ├── fixtures.json        # Test scenarios with evaluation criteria
+│       ├── test_agent_inference.py
+│       └── README.md
+├── docs/                        # Documentation
+│   ├── ARCHITECTURE.md          # Technical deep dive
+│   ├── GETTING_STARTED.md       # Detailed platform and backend guides
+│   ├── BRIDGE_NOTES.md          # Per-bridge behavior details
+│   ├── USAGE_LOG.md             # Usage logging reference and queries
+│   ├── TROUBLESHOOTING.md       # Full troubleshooting guide
+│   ├── VISION_FALLBACK.md       # Experimental vision feature
+│   ├── OLLAMA_MODELS.md         # Ollama model reference
+│   └── api-schemas/             # API schema references
+├── Makefile                     # Common commands (test, lint, start, etc.)
+├── pyproject.toml               # Python project config & dependencies
+├── ecosystem.config.js          # PM2 process config
+├── .envrc.example               # Example environment variables
+└── README.md                    # This file
 ```
 
-## Debug Logging
-
-Every request/response pair is written to `logs/debug/<session_id>.jsonl` when `BRIDGE_DEBUG=1` is set.
-
-```sh
-# Run the server with debug logging enabled
-make run-debug
-
-# In another terminal, tail the latest log with jq formatting
-make tail-logs
-```
-
-Each JSONL file contains:
-
-| Entry | Description |
-|---|---|
-| `request` | Method, path, headers, parsed request body |
-| `stream_body` | Full raw SSE text (for streaming responses) |
-| `response` | Status code, duration, headers, body (or `<streaming_response: N bytes>`) |
-
-**Log truncation:** Large request bodies (over 50 KB) are summarized instead of logged verbatim. Stream bodies are also capped. This prevents multi-megabyte debug logs when sending large files.
-
-Example — read the last 10 entries of the most recent log:
-
-```sh
-cd logs/debug && tail -n 10 $(ls -t *.jsonl | head -1) | jq .
-```
-
-Filter for just the requests:
-
-```sh
-cd logs/debug && cat $(ls -t *.jsonl | head -1) | jq 'select(.type=="request")'
-```
-
-Filter for errors only:
-
-```sh
-cd logs/debug && cat $(ls -t *.jsonl | head -1) | jq 'select(.status_code >= 400)'
-```
-
-## Development
-
-Run all checks:
-
-```sh
-make check       # lint + test
-make test-cov    # tests with coverage report
-```
-
-Individual targets:
-
-```sh
-make test-unit   # translation + streaming unit tests
-make test-e2e    # mocked upstream e2e tests
-make test-smoke  # API smoke tests
-make lint        # ruff + mypy
-make format      # ruff format
-```
-
-Pre-commit hooks (runs on every commit):
-
-```sh
-pre-commit install
-```
-
-Includes: gitleaks, ruff check, ruff format, mypy, pytest with 80% coverage gate.
-
-## Tests
-
-120 tests, ~82% coverage:
-
-- **Unit**: Request/response field mapping, content block conversion, streaming event generation
-- **E2E**: Full HTTP round-trips with mocked DeepSeek, Kimi, SiliconFlow, Fireworks AI, and Ollama APIs using `respx`
-- **Smoke**: Health, auth, model listing, validation errors
-- **Debug**: Middleware request/response capture
-- **Vision fallback**: Image description extraction and VL round-trips
+---
 
 ## License
 

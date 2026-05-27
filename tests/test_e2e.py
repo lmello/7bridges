@@ -6,6 +6,7 @@ import respx
 from fastapi.testclient import TestClient
 from httpx import Response
 
+import seven_bridges.usage_log as usage_module
 from seven_bridges.config import settings
 from seven_bridges.main import app
 
@@ -682,6 +683,163 @@ def test_kimi_streaming_tool_calls():
     assert events[-2][1]["delta"]["stop_reason"] == "tool_use"
 
 
+@respx.mock
+def test_kimi_non_streaming_logs_usage(monkeypatch, tmp_path):
+    log_file = tmp_path / "usage.jsonl"
+    monkeypatch.setattr(usage_module, "USAGE_LOG_PATH", log_file)
+
+    respx.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-kimi-usage-1",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "kimi-for-coding",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Hello!"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                    "cached_tokens": 5,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers={
+            "x-api-key": API_KEY,
+            "Content-Type": "application/json",
+            "x-claude-code-session-id": "sess-123",
+            "User-Agent": "claude-cli/2.1.150",
+        },
+        json={
+            "model": "claude-opus-4-6",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 100,
+            "stream": False,
+            "metadata": {"user_id": "u456"},
+            "tools": [
+                {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"location": {"type": "string"}},
+                        "required": ["location"],
+                    },
+                }
+            ],
+        },
+    )
+
+    assert resp.status_code == 200
+
+    lines = log_file.read_text().strip().split("\n")
+    assert len(lines) == 1
+    entry = json.loads(lines[0])
+
+    assert entry["bridge"] == "kimi"
+    assert entry["model_alias"] == "claude-opus-4-6"
+    assert entry["backend_model"] == "kimi-for-coding"
+    assert entry["response_id"] == "chatcmpl-kimi-usage-1"
+    assert entry["session_id"] == "sess-123"
+    assert entry["user_agent"] == "claude-cli/2.1.150"
+    assert entry["api_key_prefix"] == "ollama"
+    assert entry["stream"] is False
+    assert entry["max_tokens"] == 100
+    assert entry["tool_count"] == 1
+    assert entry["tool_names"] == ["get_weather"]
+    assert entry["message_count"] == 1
+    assert entry["usage"]["prompt_tokens"] == 20
+    assert entry["usage"]["completion_tokens"] == 10
+    assert entry["usage"]["total_tokens"] == 30
+    assert entry["usage"]["cached_tokens"] == 5
+    assert entry["stop_reason"] == "end_turn"
+    assert entry["client_metadata"] == {"user_id": "u456"}
+
+
+@respx.mock
+def test_kimi_streaming_logs_usage(monkeypatch, tmp_path):
+    log_file = tmp_path / "usage.jsonl"
+    monkeypatch.setattr(usage_module, "USAGE_LOG_PATH", log_file)
+
+    chunks = [
+        json.dumps(
+            {
+                "id": "chatcmpl-kimi-usage-2",
+                "choices": [{"delta": {"content": "Hi"}, "finish_reason": None}],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-kimi-usage-2",
+                "choices": [{"delta": {"content": "!"}, "finish_reason": "stop"}],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-kimi-usage-2",
+                "choices": [],
+                "usage": {
+                    "prompt_tokens": 15,
+                    "completion_tokens": 8,
+                    "total_tokens": 23,
+                    "cached_tokens": 3,
+                },
+            }
+        ),
+    ]
+
+    respx.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            text="".join(f"data:{c}\n\n" for c in chunks) + "data:[DONE]\n\n",
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "claude-opus-4-6",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+    text_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "text_delta"
+    ]
+    assert len(text_deltas) == 2
+
+    lines = log_file.read_text().strip().split("\n")
+    assert len(lines) == 1
+    entry = json.loads(lines[0])
+
+    assert entry["bridge"] == "kimi"
+    assert entry["response_id"] == "chatcmpl-kimi-usage-2"
+    assert entry["stream"] is True
+    assert entry["usage"]["prompt_tokens"] == 15
+    assert entry["usage"]["completion_tokens"] == 8
+    assert entry["usage"]["total_tokens"] == 23
+    assert entry["usage"]["cached_tokens"] == 3
+
+
 # ---------------------------------------------------------------------------
 # Ollama e2e tests
 # ---------------------------------------------------------------------------
@@ -727,7 +885,7 @@ def test_ollama_non_streaming_text():
     assert data["usage"]["output_tokens"] == 5
 
     upstream = json.loads(respx.routes[0].calls[0].request.content)
-    assert upstream["model"] == "qwen3.6:35b-a3b-coding-nvfp4"
+    assert upstream["model"] == settings.ollama_sonnet_model
 
 
 @respx.mock
