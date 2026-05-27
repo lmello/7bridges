@@ -330,7 +330,7 @@ def compute_stats(
     for i in range(hours):
         hour_dt = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=i)
         label = hour_dt.strftime("%H:00")
-        buckets[label] = {"requests": 0, "tokens_in": 0, "tokens_out": 0, "cost": 0.0}
+        buckets[label] = {"requests": 0, "tokens_in": 0, "tokens_out": 0, "cost": 0.0, "errors": 0}
 
     for entry in filtered_usage:
         ts = _parse_iso(entry.get("timestamp", ""))
@@ -351,6 +351,14 @@ def compute_stats(
             with contextlib.suppress(TypeError, ValueError):
                 buckets[hour_label]["cost"] += float(cost)
 
+    for entry in filtered_errors:
+        ts = _parse_iso(entry.get("timestamp", ""))
+        if ts is None:
+            continue
+        hour_label = ts.strftime("%H:00")
+        if hour_label in buckets:
+            buckets[hour_label]["errors"] += 1
+
     # Sort labels chronologically
     sorted_labels = sorted(buckets.keys())
     time_series = {
@@ -359,6 +367,7 @@ def compute_stats(
         "tokens_in": [buckets[label]["tokens_in"] for label in sorted_labels],
         "tokens_out": [buckets[label]["tokens_out"] for label in sorted_labels],
         "cost": [round(buckets[label]["cost"], 6) for label in sorted_labels],
+        "errors": [buckets[label]["errors"] for label in sorted_labels],
     }
 
     # --- Recent entries (last 50) ---

@@ -132,6 +132,14 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
   <div class="header-right">
     <div class="filter-pills" id="filter-pills"></div>
     <div class="updated">
+      <label for="window-select" class="refresh-label">Window</label>
+      <select id="window-select" onchange="changeWindow()">
+        <option value="1">1h</option>
+        <option value="2">2h</option>
+        <option value="6">6h</option>
+        <option value="8">8h</option>
+        <option value="24" selected>24h</option>
+      </select>
       <label for="refresh-select" class="refresh-label">Refresh</label>
       <select id="refresh-select" onchange="changeRefresh()">
         <option value="0">Off</option>
@@ -165,6 +173,12 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
       <div class="chart-wrap"><canvas id="chart-cost" role="img" aria-label="Bar chart of estimated cost per hour in USD"></canvas></div>
       <div class="sr-only" id="chart-cost-table"></div>
       <div class="chart-empty" id="chart-cost-empty" style="display:none">No data for the selected period</div>
+    </div>
+    <div class="chart-panel">
+      <h2>Errors / Hour</h2>
+      <div class="chart-wrap"><canvas id="chart-errors" role="img" aria-label="Bar chart of errors per hour"></canvas></div>
+      <div class="sr-only" id="chart-errors-table"></div>
+      <div class="chart-empty" id="chart-errors-empty" style="display:none">No data for the selected period</div>
     </div>
   </div>
   <div class="table-section">
@@ -694,7 +708,7 @@ function refreshUI(){
     ? '$' + (s.aggregates.total_cost / s.aggregates.total_requests).toFixed(4)
     : '$0.00';
   var cards = [
-    {cls:'', label:'Total Requests (24h)', value:fmtNum(s.aggregates.total_requests), sub:''},
+    {cls:'', label:'Total Requests (' + windowHours + 'h)', value:fmtNum(s.aggregates.total_requests), sub:''},
     {cls:'', label:'Total Input Tokens', value:fmtNum(s.aggregates.total_input_tokens), sub:''},
     {cls:'', label:'Total Output Tokens', value:fmtNum(s.aggregates.total_output_tokens), sub:''},
     {cls:'accent', label:'Estimated Cost', value:fmtCost(s.aggregates.total_cost), sub:'avg ' + costPerReq + '/req'},
@@ -712,6 +726,7 @@ function refreshUI(){
   drawBarChart('chart-reqs', s.time_series, 'requests', '#d4a5ff', 'chart-reqs-empty');
   drawStackedBarChart('chart-tokens', s.time_series, 'tokens_in', 'tokens_out', '#3fb950', '#d29922', 'Input', 'Output', 'chart-tokens-empty');
   drawBarChart('chart-cost', s.time_series, 'cost', '#f0883e', 'chart-cost-empty');
+  drawBarChart('chart-errors', s.time_series, 'errors', '#f85149', 'chart-errors-empty');
 
   // SR fallback tables
   var srReqRows = [];
@@ -731,6 +746,12 @@ function refreshUI(){
     srCostRows.push([s.time_series.labels[i], '$' + s.time_series.cost[i].toFixed(4)]);
   }
   buildSrTable('chart-cost-table', ['Hour', 'Cost'], srCostRows);
+
+  var srErrRows = [];
+  for (var i = 0; i < s.time_series.labels.length; i++){
+    srErrRows.push([s.time_series.labels[i], String(s.time_series.errors[i])]);
+  }
+  buildSrTable('chart-errors-table', ['Hour', 'Errors'], srErrRows);
 
   // Filtered data for tables
   var filteredBackend = filterByBackend(s.by_backend);
@@ -754,9 +775,17 @@ function refreshUI(){
   }
 }
 
+var windowHours = 24;
+
+function changeWindow(){
+  var sel = document.getElementById('window-select');
+  windowHours = parseInt(sel.value, 10);
+  fetchStats();
+}
+
 function fetchStats(){
   setStatus('fetching');
-  fetch('/api/stats')
+  fetch('/api/stats?hours=' + windowHours)
     .then(function(r){ return r.json(); })
     .then(function(data){
       statsData = data;
