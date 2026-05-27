@@ -19,6 +19,13 @@ stop:
 restart:
 	pm2 restart 7bridges
 
+setup-logs:
+	pm2 install pm2-logrotate || true
+	pm2 set pm2-logrotate:max_size 10M
+	pm2 set pm2-logrotate:retain 10
+	pm2 set pm2-logrotate:compress true
+	@echo "pm2-logrotate configured. Log files will rotate at 10MB."
+
 flush:
 	rm -f logs/out.log logs/err.log
 

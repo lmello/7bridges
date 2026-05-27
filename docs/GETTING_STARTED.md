@@ -70,22 +70,10 @@ macOS is the easiest platform for this project. Most tools are one Homebrew comm
 **2. Install the required tools:**
 
 ```bash
-brew install uv git direnv
+brew install uv git
 ```
 
-**3. Set up direnv (optional but recommended):**
-
-```bash
-# Add direnv hook to your shell
-echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
-# Or if you use bash:
-echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
-
-# Restart your terminal or run:
-source ~/.zshrc
-```
-
-**4. Clone and install:**
+**3. Clone and install:**
 
 ```bash
 git clone https://github.com/sdkks/7bridges.git
@@ -110,6 +98,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install git (usually already present)
 sudo apt update && sudo apt install git
 
+# Install direnv (optional but recommended)
+sudo apt install direnv
+
 # Clone and install
 git clone https://github.com/sdkks/7bridges.git
 cd 7bridges
@@ -121,7 +112,7 @@ uv pip install -e ".[dev]"
 **Fedora/RHEL:**
 
 ```bash
-sudo dnf install git python3.13 python3.13-devel
+sudo dnf install git python3.13 python3.13-devel direnv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 git clone https://github.com/sdkks/7bridges.git
@@ -134,7 +125,7 @@ uv pip install -e ".[dev]"
 **Arch Linux:**
 
 ```bash
-sudo pacman -S git python
+sudo pacman -S git python direnv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 git clone https://github.com/sdkks/7bridges.git
@@ -169,6 +160,27 @@ From the Start menu, search for "Ubuntu" (or your chosen distro) and open it.
 Once the bridge is running in WSL2, it is accessible at `http://localhost:4001` from both WSL2 and Windows. Claude Code running on Windows can connect to it normally.
 
 > **Note:** If you use WSL2, keep all files inside the WSL2 filesystem (`/home/yourname/...`) for better performance. Do not put the project in `/mnt/c/...` (your Windows C: drive) — file operations will be very slow.
+
+---
+
+### Auto-loading with direnv (optional, all platforms)
+
+If you installed `direnv` above, you can use it to automatically load environment variables whenever you `cd` into the project:
+
+```bash
+# 1. Add direnv hook to your shell (skip if already done)
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc   # or bash: ~/.bashrc
+source ~/.zshrc
+
+# 2. Copy the example env file and fill in your API keys
+cp .envrc.example .envrc
+# edit .envrc with your keys
+
+# 3. Allow direnv to load it
+direnv allow
+```
+
+This automatically exports the env vars and adds `.venv/bin` to `PATH` whenever you enter the project directory.
 
 ---
 
@@ -411,7 +423,10 @@ Here's what each variable does and whether you need it:
 | `OLLAMA_HOST` | Only for Ollama | URL of your Ollama server. Default: `http://127.0.0.1:11434` |
 | `OLLAMA_SONNET_MODEL` | Only for Ollama | Model name for the `ollama-sonnet` alias. |
 | `OLLAMA_HAIKU_MODEL` | Only for Ollama | Model name for the `ollama-haiku` alias. |
-| `OLLAMA_*_CONTEXT_WINDOW` | Only for Ollama | Max tokens for each Ollama alias. |
+| `OLLAMA_SONNET_CONTEXT_WINDOW` | Only for Ollama | Context window for `ollama-sonnet`. Default: `32768`. |
+| `OLLAMA_HAIKU_CONTEXT_WINDOW` | Only for Ollama | Context window for `ollama-haiku`. Default: `65536`. |
+| `OLLAMA_GPTOSS_CONTEXT_WINDOW` | Only for Ollama | Context window for `ollama-gpt-oss`. Default: `65536`. |
+| `OLLAMA_GEMMA_CONTEXT_WINDOW` | Only for Ollama | Context window for `ollama-gemma`. Default: `65536`. |
 | `OLLAMA_KEEP_ALIVE` | Only for Ollama | How long to keep model loaded in memory. |
 | `SEVEN_BRIDGES_VISION_FALLBACK_ENABLED` | No | Enable experimental vision fallback. See [VISION_FALLBACK.md](VISION_FALLBACK.md). |
 | `SEVEN_BRIDGES_VISION_FALLBACK_BACKEND` | No | VL backend for vision fallback. Format: `kimi/kimi-k2-6` or `ollama/qwen3-vl:8b`. |

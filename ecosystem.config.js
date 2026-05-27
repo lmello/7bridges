@@ -15,6 +15,10 @@ module.exports = {
     restart_delay: 5000,
     max_memory_restart: '512M',
     watch: false,
+    // Note: BRIDGE_DEBUG is intentionally NOT set here.
+    // Debug mode disables streaming (buffers the full response),
+    // which makes Kimi and other backends feel very slow.
+    // Use `make run-debug` when you actually need request/response logging.
     env: {
       PYTHONPATH: 'src',
     },

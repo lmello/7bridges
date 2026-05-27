@@ -22,7 +22,7 @@ def _log_usage(
     stream: bool,
     max_tokens: int | None,
     thinking_enabled: bool | None,
-    thinking_budget: int | None,
+    thinking_budget: str | None,
     tool_count: int,
     tool_names: list[str],
     message_count: int,

@@ -11,7 +11,7 @@ This is an **Anthropic Messages API proxy** — a translation layer, not a gener
 ### 1. Small, Tested Changes
 
 - **One concern per commit.** A commit should touch either translation logic, a backend, tests, or docs — not all four at once unless the change is trivial.
-- **Never commit without running tests.** The pre-commit gate requires 80% coverage and all 156 tests passing.
+- **Never commit without running tests.** The pre-commit gate requires 80% coverage and all tests passing.
 - **Prefer fixing over adding.** If a feature can be achieved by tightening existing translation rather than adding new endpoints, do that.
 
 ### 2. Test-First for Translation Logic
@@ -98,7 +98,7 @@ Rules are strict (`mypy --strict`, `ruff` with `UP` and `B` rules). Type ignores
 2. **ruff check** — lint must pass
 3. **ruff format** — auto-format
 4. **mypy** — strict type checking
-5. **pytest** — all 61 unit tests + 14 agent inference tests, 80% coverage gate
+5. **pytest** — all unit tests + agent inference tests, 80% coverage gate
 
 If any step fails, the commit is rejected. Fix and retry.
 

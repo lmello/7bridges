@@ -70,31 +70,11 @@ class KimiBridge(Bridge):
 
             raw = response.json()
             usage = raw.get("usage")
-            ctx = self.usage_context
-            if usage and ctx:
-                _log_usage(
-                    bridge_name=self.name,
-                    model_alias=self.model_alias,
-                    backend_model=self.backend_model,
+            if usage:
+                self._log_usage_from_context(
                     response_id=raw.get("id"),
                     usage=usage,
-                    stream=ctx.get("stream", False),
-                    max_tokens=ctx.get("max_tokens"),
-                    thinking_enabled=ctx.get("thinking_enabled"),
-                    thinking_budget=ctx.get("thinking_budget"),
-                    tool_count=ctx.get("tool_count", 0),
-                    tool_names=ctx.get("tool_names", []),
-                    message_count=ctx.get("message_count", 0),
-                    has_images=ctx.get("has_images", False),
-                    has_video=ctx.get("has_video", False),
-                    temperature=ctx.get("temperature"),
-                    top_p=ctx.get("top_p"),
-                    session_id=ctx.get("session_id"),
-                    client_app=ctx.get("client_app"),
-                    user_agent=ctx.get("user_agent"),
-                    api_key_prefix=ctx.get("api_key_prefix"),
                     stop_reason=_map_stop_reason(raw.get("choices", [{}])[0].get("finish_reason")),
-                    client_metadata=ctx.get("client_metadata"),
                 )
 
             return openai_to_anthropic(raw, self.model_alias)
@@ -143,35 +123,54 @@ class KimiBridge(Bridge):
                         choices = chunk.get("choices", [])
                         usage = chunk.get("usage")
                         if not choices and usage:
-                            ctx = self.usage_context
-                            if ctx:
-                                _log_usage(
-                                    bridge_name=self.name,
-                                    model_alias=self.model_alias,
-                                    backend_model=self.backend_model,
-                                    response_id=chunk.get("id"),
-                                    usage=usage,
-                                    stream=ctx.get("stream", True),
-                                    max_tokens=ctx.get("max_tokens"),
-                                    thinking_enabled=ctx.get("thinking_enabled"),
-                                    thinking_budget=ctx.get("thinking_budget"),
-                                    tool_count=ctx.get("tool_count", 0),
-                                    tool_names=ctx.get("tool_names", []),
-                                    message_count=ctx.get("message_count", 0),
-                                    has_images=ctx.get("has_images", False),
-                                    has_video=ctx.get("has_video", False),
-                                    temperature=ctx.get("temperature"),
-                                    top_p=ctx.get("top_p"),
-                                    session_id=ctx.get("session_id"),
-                                    client_app=ctx.get("client_app"),
-                                    user_agent=ctx.get("user_agent"),
-                                    api_key_prefix=ctx.get("api_key_prefix"),
-                                    stop_reason=None,
-                                    client_metadata=ctx.get("client_metadata"),
-                                )
+                            self._log_usage_from_context(
+                                response_id=chunk.get("id"),
+                                usage=usage,
+                                stop_reason=None,
+                            )
                     except json.JSONDecodeError:
-                        pass
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.warning("Failed to parse stream chunk: %r", data)
                     yield {"type": "raw", "data": data}
+
+
+    def _log_usage_from_context(
+        self,
+        *,
+        response_id: str | None,
+        usage: dict[str, Any],
+        stop_reason: str | None,
+    ) -> None:
+        """Log usage from self.usage_context if available."""
+        ctx = self.usage_context
+        if not ctx:
+            return
+        _log_usage(
+            bridge_name=self.name,
+            model_alias=self.model_alias,
+            backend_model=self.backend_model,
+            response_id=response_id,
+            usage=usage,
+            stream=ctx.get("stream", False),
+            max_tokens=ctx.get("max_tokens"),
+            thinking_enabled=ctx.get("thinking_enabled"),
+            thinking_budget=ctx.get("thinking_budget"),
+            tool_count=ctx.get("tool_count", 0),
+            tool_names=ctx.get("tool_names", []),
+            message_count=ctx.get("message_count", 0),
+            has_images=ctx.get("has_images", False),
+            has_video=ctx.get("has_video", False),
+            temperature=ctx.get("temperature"),
+            top_p=ctx.get("top_p"),
+            session_id=ctx.get("session_id"),
+            client_app=ctx.get("client_app"),
+            user_agent=ctx.get("user_agent"),
+            api_key_prefix=ctx.get("api_key_prefix"),
+            stop_reason=stop_reason,
+            client_metadata=ctx.get("client_metadata"),
+        )
 
 
 def _map_stop_reason(finish_reason: str | None) -> str | None:

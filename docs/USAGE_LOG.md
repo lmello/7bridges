@@ -139,7 +139,31 @@ gzip logs/usage-$(date +%Y%m%d).jsonl
 # The next request will create a fresh usage.jsonl
 ```
 
-For production deployments, consider a cron job or logrotate.
+### Automated Rotation with PM2
+
+If you run the bridge via `make start` (PM2), install `pm2-logrotate` to handle all log files automatically:
+
+```bash
+make setup-logs
+```
+
+This installs `pm2-logrotate` and configures it to rotate `logs/out.log`, `logs/err.log`, and `logs/usage.jsonl` when they exceed 10 MB, keeping the last 10 compressed backups.
+
+You can also configure it manually:
+
+```bash
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 10
+pm2 set pm2-logrotate:compress true
+```
+
+For non-PM2 deployments, use a cron job or system `logrotate`:
+
+```bash
+# Add to crontab (crontab -e)
+0 0 * * * cd /path/to/7bridges && mv logs/usage.jsonl logs/usage-$(date +\%Y\%m\%d).jsonl && gzip logs/usage-$(date +\%Y\%m\%d).jsonl
+```
 
 ---
 
