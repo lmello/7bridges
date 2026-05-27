@@ -1,5 +1,6 @@
 """SiliconFlow bridge — translates Anthropic Messages API to SiliconFlow's OpenAI API."""
 
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -55,6 +56,7 @@ class SiliconFlowBridge(Bridge):
 
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         """Send a non-streaming request to SiliconFlow."""
+        self.start_timer()
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.model = self.backend_model
 
@@ -71,16 +73,31 @@ class SiliconFlowBridge(Bridge):
 
             if response.status_code != 200:
                 error_type = _map_http_error(response.status_code)
+                self._log_error_from_context(
+                    status_code=response.status_code,
+                    error_type=error_type,
+                    message=response.text,
+                )
                 raise BridgeError(
                     message=response.text,
                     status_code=response.status_code,
                     error_type=error_type,
                 )
 
-            return openai_to_anthropic(response.json(), self.model_alias)
+            raw = response.json()
+            usage = raw.get("usage")
+            if usage:
+                self._log_usage_from_context(
+                    response_id=raw.get("id"),
+                    usage=usage,
+                    stop_reason=_map_stop_reason(raw.get("choices", [{}])[0].get("finish_reason")),
+                )
+
+            return openai_to_anthropic(raw, self.model_alias)
 
     async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
         """Send a streaming request to SiliconFlow and yield Anthropic-format events."""
+        self.start_timer()
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.model = self.backend_model
         openai_request.stream = True
@@ -109,6 +126,11 @@ class SiliconFlowBridge(Bridge):
             if response.status_code != 200:
                 body = await response.aread()
                 error_type = _map_http_error(response.status_code)
+                self._log_error_from_context(
+                    status_code=response.status_code,
+                    error_type=error_type,
+                    message=body.decode(),
+                )
                 raise BridgeError(
                     message=body.decode(),
                     status_code=response.status_code,
@@ -120,4 +142,31 @@ class SiliconFlowBridge(Bridge):
                     data = line[5:].strip()
                     if data == "[DONE]":
                         break
+                    # Detect usage-only chunks (from include_usage=True)
+                    try:
+                        chunk = json.loads(data)
+                        choices = chunk.get("choices", [])
+                        usage = chunk.get("usage")
+                        if not choices and usage:
+                            self._log_usage_from_context(
+                                response_id=chunk.get("id"),
+                                usage=usage,
+                                stop_reason=None,
+                            )
+                    except json.JSONDecodeError:
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.warning("Failed to parse stream chunk: %r", data)
                     yield {"type": "raw", "data": data}
+
+
+def _map_stop_reason(finish_reason: str | None) -> str | None:
+    """Map OpenAI finish_reason to Anthropic stop_reason for usage logging."""
+    mapping = {
+        "stop": "end_turn",
+        "length": "max_tokens",
+        "tool_calls": "tool_use",
+        "content_filter": "max_tokens",
+    }
+    return mapping.get(finish_reason or "")

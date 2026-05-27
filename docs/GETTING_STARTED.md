@@ -514,6 +514,47 @@ cd logs/debug && cat $(ls -t *.jsonl | head -1) | jq 'select(.status_code >= 400
 
 ---
 
+## Usage Dashboard
+
+The bridge includes a real-time usage dashboard that visualizes token consumption, costs, cache effectiveness, error rates, and latency across all backends. The dashboard reads the same JSONL log files described in [USAGE_LOG.md](USAGE_LOG.md) and serves a web UI on port 4002.
+
+### Quick Start
+
+```bash
+# Start with PM2
+make dashboard
+
+# Or run directly (no PM2)
+make dashboard-run
+```
+
+Open **http://localhost:4002** in your browser.
+
+### What You See
+
+- **6 stat cards** — total requests, input/output tokens, estimated cost (with per-request average), cache hit rate, error rate
+- **3 time-series charts** — requests/hour, tokens/hour, and cost/hour over the last 24 hours, filterable by backend
+- **5 sortable tables** — backend breakdown, model breakdown, top sessions, recent errors, recent requests
+- **Auto-refresh** — data updates every 10 seconds with a green/red status indicator
+- **Backend filter** — pill-style toggle buttons to include/exclude specific backends
+
+### Launch Commands
+
+| Command | Description |
+|---|---|
+| `make dashboard` | Start dashboard via PM2 |
+| `make dashboard-stop` | Stop the dashboard |
+| `make dashboard-restart` | Restart the dashboard |
+| `make dashboard-logs` | Tail dashboard PM2 logs |
+| `make dashboard-run` | Run directly via uvicorn (development) |
+| `make start-all` | Start both bridge (4001) and dashboard (4002) |
+
+The dashboard runs as a separate process. Stopping it does not affect the bridge. Starting it does not require restarting the bridge.
+
+For details on the data the dashboard reads and the log format, see [USAGE_LOG.md](USAGE_LOG.md).
+
+---
+
 ## Next Steps
 
 - Read the [Architecture Overview](ARCHITECTURE.md) to understand how translation works

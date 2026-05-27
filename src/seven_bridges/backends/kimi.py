@@ -10,7 +10,6 @@ from seven_bridges.backends.base import Bridge, BridgeError, VendorCapabilities
 from seven_bridges.models.anthropic import MessagesRequest, MessagesResponse
 from seven_bridges.translation.request import anthropic_to_openai
 from seven_bridges.translation.response import openai_to_anthropic
-from seven_bridges.usage_log import _log_usage
 
 
 def _map_http_error(status_code: int) -> str:
@@ -45,6 +44,7 @@ class KimiBridge(Bridge):
 
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         """Send a non-streaming request to Kimi."""
+        self.start_timer()
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.model = self.backend_model
 
@@ -62,6 +62,11 @@ class KimiBridge(Bridge):
 
             if response.status_code != 200:
                 error_type = _map_http_error(response.status_code)
+                self._log_error_from_context(
+                    status_code=response.status_code,
+                    error_type=error_type,
+                    message=response.text,
+                )
                 raise BridgeError(
                     message=response.text,
                     status_code=response.status_code,
@@ -81,6 +86,7 @@ class KimiBridge(Bridge):
 
     async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
         """Send a streaming request to Kimi and yield Anthropic-format events."""
+        self.start_timer()
         openai_request = anthropic_to_openai(request, self.name)
         openai_request.model = self.backend_model
         openai_request.stream = True
@@ -106,6 +112,11 @@ class KimiBridge(Bridge):
             if response.status_code != 200:
                 body = await response.aread()
                 error_type = _map_http_error(response.status_code)
+                self._log_error_from_context(
+                    status_code=response.status_code,
+                    error_type=error_type,
+                    message=body.decode(),
+                )
                 raise BridgeError(
                     message=body.decode(),
                     status_code=response.status_code,
@@ -134,43 +145,6 @@ class KimiBridge(Bridge):
                         logger = logging.getLogger(__name__)
                         logger.warning("Failed to parse stream chunk: %r", data)
                     yield {"type": "raw", "data": data}
-
-
-    def _log_usage_from_context(
-        self,
-        *,
-        response_id: str | None,
-        usage: dict[str, Any],
-        stop_reason: str | None,
-    ) -> None:
-        """Log usage from self.usage_context if available."""
-        ctx = self.usage_context
-        if not ctx:
-            return
-        _log_usage(
-            bridge_name=self.name,
-            model_alias=self.model_alias,
-            backend_model=self.backend_model,
-            response_id=response_id,
-            usage=usage,
-            stream=ctx.get("stream", False),
-            max_tokens=ctx.get("max_tokens"),
-            thinking_enabled=ctx.get("thinking_enabled"),
-            thinking_budget=ctx.get("thinking_budget"),
-            tool_count=ctx.get("tool_count", 0),
-            tool_names=ctx.get("tool_names", []),
-            message_count=ctx.get("message_count", 0),
-            has_images=ctx.get("has_images", False),
-            has_video=ctx.get("has_video", False),
-            temperature=ctx.get("temperature"),
-            top_p=ctx.get("top_p"),
-            session_id=ctx.get("session_id"),
-            client_app=ctx.get("client_app"),
-            user_agent=ctx.get("user_agent"),
-            api_key_prefix=ctx.get("api_key_prefix"),
-            stop_reason=stop_reason,
-            client_metadata=ctx.get("client_metadata"),
-        )
 
 
 def _map_stop_reason(finish_reason: str | None) -> str | None:

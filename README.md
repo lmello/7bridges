@@ -336,11 +336,23 @@ For log structure, filtering examples, and log rotation, see [`docs/GETTING_STAR
 
 ### Usage Logging
 
-Every successful chat completion is automatically logged to `logs/usage.jsonl` with token counts and request metadata. Always on, no config needed.
+Every request is automatically logged with token counts, cost estimates, latency, cache hit rate, and request metadata. Always on, no config needed.
 
 ```bash
 cd logs && tail -n 5 usage.jsonl | jq .
 ```
+
+Failed requests are logged to `logs/errors.jsonl`.
+
+For the full field reference, enriched fields (cost, latency, cache), error log schema, and query examples, see [`docs/USAGE_LOG.md`](docs/USAGE_LOG.md).
+
+### Usage Dashboard
+
+```bash
+make dashboard          # start dashboard on http://localhost:4002
+```
+
+Real-time web UI with stat cards, time-series charts, sortable tables, backend/model/session breakdowns, and error monitoring. No database — reads JSONL files directly. See [`docs/USAGE_LOG.md`](docs/USAGE_LOG.md) for details.
 
 For query examples, log rotation, and the full field reference, see [`docs/USAGE_LOG.md`](docs/USAGE_LOG.md).
 

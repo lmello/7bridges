@@ -23,5 +23,24 @@ module.exports = {
       PYTHONPATH: 'src',
       BRIDGE_DEBUG: process.env.BRIDGE_DEBUG || '0',
     },
+  }, {
+    name: '7bridges-dashboard',
+    cwd: __dirname,
+    script: '.venv/bin/python',
+    args: '-m uvicorn seven_bridges.dashboard.main:app --host 0.0.0.0 --port 4002',
+    exec_interpreter: 'none',
+    out_file: 'logs/dashboard-out.log',
+    error_file: 'logs/dashboard-err.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    merge_logs: true,
+    autorestart: true,
+    max_restarts: 10,
+    min_uptime: '10s',
+    restart_delay: 5000,
+    max_memory_restart: '256M',
+    watch: false,
+    env: {
+      PYTHONPATH: 'src',
+    },
   }]
 };

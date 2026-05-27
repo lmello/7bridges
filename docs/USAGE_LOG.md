@@ -1,6 +1,47 @@
 # Usage Logging
 
-Every successful chat completion is automatically logged to `logs/usage.jsonl` with detailed token accounting and request metadata. This is useful for cost tracking, usage analysis, and debugging unexpected bills.
+Every successful chat completion is automatically logged to `logs/usage.jsonl` with detailed token accounting and request metadata. Failed requests are logged to `logs/errors.jsonl`. A web dashboard is available for real-time monitoring.
+
+---
+
+## Web Dashboard
+
+The easiest way to explore usage data is the built-in dashboard:
+
+```bash
+# Start the dashboard (runs on port 4002 alongside the bridge)
+make dashboard
+
+# Or start both bridge and dashboard together
+make start-all
+```
+
+Open **http://localhost:4002** in your browser.
+
+The dashboard provides:
+- **Stat cards** — total requests, tokens in/out, estimated cost, cache hit rate, error rate
+- **Time-series charts** — requests/hour, tokens/hour, and cost/hour over the last 24 hours with backend filtering
+- **Backend breakdown table** — per-backend request counts, token usage, cost, latency, and error rates
+- **Model breakdown table** — per-model usage and cost breakdown
+- **Session table** — top sessions by request count and cost
+- **Recent errors table** — last 50 errors with status codes, error types, and latency
+- **Recent requests table** — last 50 requests with token counts, cost, and stream flags
+- **Auto-refresh** — refreshes every 10 seconds; green/red dot indicates fetch status
+- **Backend filter** — pill buttons to toggle specific backends on/off across all views
+
+### Launch options
+
+| Command | Description |
+|---|---|
+| `make dashboard` | Start dashboard via PM2 on port 4002 |
+| `make dashboard-stop` | Stop the dashboard PM2 process |
+| `make dashboard-restart` | Restart dashboard |
+| `make dashboard-logs` | Tail dashboard PM2 logs |
+| `make dashboard-run` | Run dashboard directly via uvicorn (no PM2, for development) |
+| `make start-all` | Start both bridge (port 4001) and dashboard (port 4002) |
+| `make stop` | Stop both bridge and dashboard |
+
+The dashboard runs as a separate PM2 process named `7bridges-dashboard`. It reads JSONL files directly — no database required. Memory stays under 256 MB as configured in PM2.
 
 ---
 
@@ -8,15 +49,16 @@ Every successful chat completion is automatically logged to `logs/usage.jsonl` w
 
 | Property | Value |
 |---|---|
-| **Log file** | `logs/usage.jsonl` |
+| **Usage log** | `logs/usage.jsonl` |
+| **Error log** | `logs/errors.jsonl` |
 | **Format** | JSON Lines (one JSON object per line) |
 | **Enabled by** | Always on — no configuration required |
 | **Failures** | Silently ignored — logging never breaks a request |
-| **Currently wired for** | Kimi backend (other backends coming) |
+| **Dashboard** | `http://localhost:4002` |
 
 ---
 
-## Logged Fields
+## Usage Log Fields (`usage.jsonl`)
 
 Each line contains the following fields:
 
@@ -26,7 +68,7 @@ Each line contains the following fields:
 | `session_id` | `string \| null` | Claude Code session ID from `x-claude-code-session-id` header |
 | `client_app` | `string \| null` | Client identifier (`cli`, etc.) |
 | `user_agent` | `string \| null` | Full User-Agent header |
-| `api_key_prefix` | `string \| null` | First 8 characters of the API key used (for key rotation tracking) |
+| `api_key_prefix` | `string \| null` | First 8 characters of the API key used |
 | `bridge` | `string` | Backend name: `kimi`, `deepseek`, `siliconflow`, `fireworks`, `ollama` |
 | `model_alias` | `string` | The alias the client requested (e.g. `claude-opus-4-6`) |
 | `backend_model` | `string` | The actual upstream model name (e.g. `kimi-for-coding`) |
@@ -44,6 +86,10 @@ Each line contains the following fields:
 | `top_p` | `number \| null` | Nucleus sampling parameter |
 | `stop_reason` | `string \| null` | Why the model stopped (`end_turn`, `max_tokens`, `tool_use`) |
 | `client_metadata` | `object \| null` | Arbitrary metadata object from the request |
+| `estimated_cost_usd` | `number \| null` | Estimated cost in USD using default pricing |
+| `latency_ms` | `number \| null` | Total request latency in milliseconds |
+| `cache_headers_sent` | `boolean \| null` | Whether cache-related headers were included in the upstream request |
+| `cache_hit_rate` | `number \| null` | Cache hit rate as percentage (0-100), or null if no cache data |
 | `usage` | `object` | Token counts (see below) |
 
 ### Usage Sub-Object
@@ -59,111 +105,139 @@ Each line contains the following fields:
 }
 ```
 
+### Enriched Fields (new)
+
 | Field | Description |
 |---|---|
-| `prompt_tokens` | Tokens in the prompt |
-| `completion_tokens` | Tokens in the response |
-| `total_tokens` | Sum of prompt + completion |
-| `cached_tokens` | Kimi-style cached prompt tokens |
-| `prompt_cache_hit_tokens` | DeepSeek-style cache hit tokens |
-| `prompt_cache_miss_tokens` | DeepSeek-style cache miss tokens |
+| `estimated_cost_usd` | Computed using default pricing: $0.40/M input, $4.00/M output, $0.15/M cached read. Rounded to 6 decimal places. |
+| `latency_ms` | Wall-clock duration from backend request start to response completion. Measured by the base class timer. |
+| `cache_headers_sent` | `true` if cache-related headers were sent to the upstream backend. Reserved for future per-backend cache configuration. |
+| `cache_hit_rate` | Computed as `prompt_cache_hit_tokens / (hit + miss) * 100` when both cache fields are present. `null` otherwise. Rounded to 1 decimal place. |
 
-Note: only one caching style is typically populated per backend. The others are `null`.
+> **Note on cost:** The default pricing is a fixed estimate and does not reflect actual vendor billing. Per-model pricing overrides will be added in a future release.
+
+---
+
+## Error Log Fields (`errors.jsonl`)
+
+| Field | Type | Description |
+|---|---|---|
+| `timestamp` | ISO 8601 string | When the error occurred (UTC) |
+| `session_id` | `string \| null` | Claude Code session ID |
+| `bridge` | `string` | Backend name |
+| `model_alias` | `string` | The alias the client requested |
+| `backend_model` | `string` | The actual upstream model name |
+| `status_code` | `integer` | HTTP status code from the upstream backend |
+| `error_type` | `string` | Anthropic-style error type (`rate_limit_error`, `authentication_error`, `api_error`, etc.) |
+| `error_message` | `string` | Error message truncated to 500 characters |
+| `stream` | `boolean` | Whether the request used streaming |
+| `latency_ms` | `number \| null` | Total request latency up to the error point |
+| `tool_count` | `integer` | Number of tools in the request |
+| `has_images` | `boolean` | Whether images were present |
+| `has_video` | `boolean` | Whether video was present |
+| `client_app` | `string \| null` | Client identifier |
+
+---
+
+## Pricing
+
+Default cost estimation uses these rates:
+
+| Token type | Price per 1M tokens |
+|---|---|
+| Input (prompt) | $0.40 |
+| Output (completion) | $4.00 |
+| Cached read | $0.15 |
+| Cached write | Same as input ($0.40) |
+
+Formula: `(input * 0.40 + output * 4.00 + cache_read * 0.15) / 1_000_000`
+
+Per-backend and per-model pricing overrides are planned for a future release. Open an issue to request support for your provider's actual rates.
 
 ---
 
 ## Example Queries
 
-### Read the last 5 entries
+### Read the last 5 usage entries
 
 ```bash
-cd logs && tail -n 5 usage.jsonl | jq .
+tail -n 5 logs/usage.jsonl | jq .
 ```
 
-### Total tokens today
+### Total cost today
 
 ```bash
-cd logs && jq -s '
+jq -s '
   map(select(.timestamp | startswith("'$(date -u +%Y-%m-%d)'")))
-  | map(.usage.total_tokens)
-  | add
-' usage.jsonl
+  | map(.estimated_cost_usd // 0) | add
+' logs/usage.jsonl
 ```
 
-### Tokens by backend
+### Cost by backend
 
 ```bash
-cd logs && jq -s '
+jq -s '
   group_by(.bridge)
   | map({
       bridge: .[0].bridge,
       requests: length,
-      total_tokens: map(.usage.total_tokens) | add
+      cost: (map(.estimated_cost_usd // 0) | add)
     })
-' usage.jsonl
+' logs/usage.jsonl
 ```
 
-### Find the most expensive session
+### Cache hit rate by backend
 
 ```bash
-cd logs && jq -s '
-  group_by(.session_id)
+jq -s '
+  group_by(.bridge)
   | map({
-      session: .[0].session_id,
+      bridge: .[0].bridge,
       requests: length,
-      total_tokens: map(.usage.total_tokens) | add
+      avg_cache_hit: (map(.cache_hit_rate) | add / length)
     })
-  | sort_by(.total_tokens)
-  | reverse
-  | .[:5]
-' usage.jsonl
+' logs/usage.jsonl
 ```
 
-### Filter for streaming requests with thinking enabled
+### Average latency by backend
 
 ```bash
-cd logs && jq 'select(.stream == true and .thinking_enabled == true)' usage.jsonl
+jq -s '
+  group_by(.bridge)
+  | map({
+      bridge: .[0].bridge,
+      avg_latency_ms: ((map(.latency_ms // 0) | add) / length)
+    })
+' logs/usage.jsonl
+```
+
+### Recent errors
+
+```bash
+tail -n 20 logs/errors.jsonl | jq '{ts: .timestamp, bridge, status: .status_code, type: .error_type, msg: .error_message}'
 ```
 
 ---
 
 ## Log Rotation
 
-There is no automatic rotation. The file grows indefinitely while the server runs. To manage size:
+There is no automatic rotation. The files grow indefinitely while the server runs. To manage size:
 
 ```bash
-# Rotate manually (move and compress)
+# Rotate manually
 mv logs/usage.jsonl logs/usage-$(date +%Y%m%d).jsonl
 gzip logs/usage-$(date +%Y%m%d).jsonl
 
-# The next request will create a fresh usage.jsonl
+# The next request creates a fresh file
 ```
 
-### Automated Rotation with PM2
-
-If you run the bridge via `make start` (PM2), install `pm2-logrotate` to handle all log files automatically:
+If you run the bridge via PM2, install `pm2-logrotate`:
 
 ```bash
 make setup-logs
 ```
 
-This installs `pm2-logrotate` and configures it to rotate `logs/out.log`, `logs/err.log`, and `logs/usage.jsonl` when they exceed 10 MB, keeping the last 10 compressed backups.
-
-You can also configure it manually:
-
-```bash
-pm2 install pm2-logrotate
-pm2 set pm2-logrotate:max_size 10M
-pm2 set pm2-logrotate:retain 10
-pm2 set pm2-logrotate:compress true
-```
-
-For non-PM2 deployments, use a cron job or system `logrotate`:
-
-```bash
-# Add to crontab (crontab -e)
-0 0 * * * cd /path/to/7bridges && mv logs/usage.jsonl logs/usage-$(date +\%Y\%m\%d).jsonl && gzip logs/usage-$(date +\%Y\%m\%d).jsonl
-```
+This installs `pm2-logrotate` and configures it to rotate logs at 10 MB, keeping the last 10 compressed backups.
 
 ---
 
@@ -177,12 +251,12 @@ For non-PM2 deployments, use a cron job or system `logrotate`:
 
 ## Integration Status
 
-| Backend | Usage Logging | Notes |
-|---|---|---|
-| Kimi | Yes | Full support — streaming and non-streaming |
-| DeepSeek | No | Planned |
-| SiliconFlow | No | Planned |
-| Fireworks AI | No | Planned |
-| Ollama | No | Not applicable (local, free) |
+| Backend | Usage Logging | Error Logging | Latency | Cost |
+|---|---|---|---|---|
+| Kimi | Yes | Yes | Yes | Yes |
+| DeepSeek | Yes | Yes | Yes | Yes |
+| SiliconFlow | Yes | Yes | Yes | Yes |
+| Fireworks AI | Yes | Yes | Yes | Yes |
+| Ollama | Yes | Yes | Yes | Yes |
 
-To add usage logging to a backend, call `_log_usage()` from `seven_bridges.usage_log` in the bridge's `chat()` and `chat_stream()` methods, passing `self.usage_context` (populated automatically by `main.py`).
+All backends use the shared logging infrastructure in the `Bridge` base class. To add usage logging to a new backend, call `self.start_timer()` before the upstream request and `self._log_usage_from_context()` / `self._log_error_from_context()` after.

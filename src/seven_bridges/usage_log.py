@@ -12,6 +12,32 @@ from typing import Any
 USAGE_LOG_PATH = Path(__file__).parent.parent.parent / "logs" / "usage.jsonl"
 
 
+def _compute_cost(usage: dict[str, Any]) -> float:
+    """Compute estimated cost in USD from usage statistics.
+
+    Pricing (per 1M tokens):
+      - input tokens: $0.40
+      - output tokens: $4.00
+      - cache read tokens: $0.15
+    """
+    input_tokens: int = usage.get("prompt_tokens", 0)
+    output_tokens: int = usage.get("completion_tokens", 0)
+    cache_read_tokens: int = usage.get("prompt_cache_hit_tokens") or usage.get("cached_tokens") or 0
+    cost = (input_tokens * 0.40 + output_tokens * 4.00 + cache_read_tokens * 0.15) / 1_000_000
+    return round(cost, 6)
+
+
+def _compute_cache_hit_rate(usage: dict[str, Any]) -> float | None:
+    """Compute cache hit rate as a percentage, or None if not applicable."""
+    hit = usage.get("prompt_cache_hit_tokens")
+    miss = usage.get("prompt_cache_miss_tokens")
+
+    if isinstance(hit, int) and isinstance(miss, int) and (hit + miss) > 0:
+        return round(hit / (hit + miss) * 100, 1)
+
+    return None
+
+
 def _log_usage(
     *,
     bridge_name: str,
@@ -36,6 +62,10 @@ def _log_usage(
     api_key_prefix: str | None,
     stop_reason: str | None,
     client_metadata: dict[str, Any] | None,
+    estimated_cost_usd: float | None = None,
+    latency_ms: float | None = None,
+    cache_headers_sent: bool | None = None,
+    cache_hit_rate: float | None = None,
 ) -> None:
     """Write a single usage event to logs/usage.jsonl.
 
@@ -71,6 +101,10 @@ def _log_usage(
                 "prompt_cache_hit_tokens": usage.get("prompt_cache_hit_tokens"),
                 "prompt_cache_miss_tokens": usage.get("prompt_cache_miss_tokens"),
             },
+            "estimated_cost_usd": estimated_cost_usd,
+            "latency_ms": latency_ms,
+            "cache_headers_sent": cache_headers_sent,
+            "cache_hit_rate": cache_hit_rate,
             "stop_reason": stop_reason,
             "client_metadata": client_metadata,
         }

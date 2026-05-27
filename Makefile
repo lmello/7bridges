@@ -1,4 +1,4 @@
-.PHONY: install dev lock start stop restart flush logs run-debug tail-logs test test-unit test-e2e test-smoke test-cov test-ci test-full lint format check
+.PHONY: install dev lock start stop restart flush logs run-debug tail-logs test test-unit test-e2e test-smoke test-cov test-ci test-full lint format check dashboard dashboard-stop dashboard-logs dashboard-run start-all
 
 install:
 	uv venv --python 3.13
@@ -18,9 +18,30 @@ start-debug:
 
 stop:
 	pm2 delete 7bridges
+	pm2 delete 7bridges-dashboard || true
 
 restart:
 	pm2 restart 7bridges
+
+## Dashboard (runs as separate PM2 process on port 4002)
+
+dashboard:
+	pm2 start ecosystem.config.js --only 7bridges-dashboard
+
+dashboard-stop:
+	pm2 delete 7bridges-dashboard
+
+dashboard-restart:
+	pm2 restart 7bridges-dashboard
+
+dashboard-logs:
+	pm2 logs 7bridges-dashboard
+
+dashboard-run:
+	.venv/bin/python -m uvicorn seven_bridges.dashboard.main:app --host 0.0.0.0 --port 4002
+
+start-all:
+	pm2 start ecosystem.config.js
 
 setup-logs:
 	pm2 install pm2-logrotate || true

@@ -303,6 +303,7 @@ class OllamaBridge(Bridge):
         return options
 
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
+        self.start_timer()
         try:
             messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
         except Exception as err:
@@ -311,6 +312,11 @@ class OllamaBridge(Bridge):
                 "request translation failed",
                 model_alias=self.model_alias,
                 trace=traceback.format_exc(),
+            )
+            self._log_error_from_context(
+                status_code=502,
+                error_type="api_error",
+                message="Failed to translate request for Ollama",
             )
             raise BridgeError(
                 message="Failed to translate request for Ollama",
@@ -352,6 +358,11 @@ class OllamaBridge(Bridge):
                 error=str(e),
                 trace=traceback.format_exc(),
             )
+            self._log_error_from_context(
+                status_code=502,
+                error_type="api_error",
+                message=str(e),
+            )
             raise BridgeError(
                 message=str(e),
                 status_code=502,
@@ -368,11 +379,27 @@ class OllamaBridge(Bridge):
                 response_preview=str(response)[:1000],
                 trace=traceback.format_exc(),
             )
+            self._log_error_from_context(
+                status_code=502,
+                error_type="api_error",
+                message="Failed to translate Ollama response",
+            )
             raise BridgeError(
                 message="Failed to translate Ollama response",
                 status_code=502,
                 error_type="api_error",
             ) from err
+
+        usage = {
+            "prompt_tokens": response.prompt_eval_count or 0,
+            "completion_tokens": response.eval_count or 0,
+            "total_tokens": (response.prompt_eval_count or 0) + (response.eval_count or 0),
+        }
+        self._log_usage_from_context(
+            response_id=None,
+            usage=usage,
+            stop_reason=result.stop_reason,
+        )
 
         _log_stderr(
             "info",
@@ -386,6 +413,7 @@ class OllamaBridge(Bridge):
         return result
 
     async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
+        self.start_timer()
         try:
             messages, system_prompt, tools = _anthropic_messages_to_ollama(request)
         except Exception as err:
@@ -394,6 +422,11 @@ class OllamaBridge(Bridge):
                 "stream request translation failed",
                 model_alias=self.model_alias,
                 trace=traceback.format_exc(),
+            )
+            self._log_error_from_context(
+                status_code=502,
+                error_type="api_error",
+                message="Failed to translate stream request for Ollama",
             )
             raise BridgeError(
                 message="Failed to translate stream request for Ollama",
@@ -436,6 +469,11 @@ class OllamaBridge(Bridge):
                 error=str(e),
                 trace=traceback.format_exc(),
             )
+            self._log_error_from_context(
+                status_code=502,
+                error_type="api_error",
+                message=str(e),
+            )
             raise BridgeError(
                 message=str(e),
                 status_code=502,
@@ -444,8 +482,10 @@ class OllamaBridge(Bridge):
 
         chunk_count = 0
         prev_args_len: dict[int, int] = {}
+        last_chunk: Any = None
         try:
             async for chunk in stream:
+                last_chunk = chunk
                 chunk_count += 1
                 try:
                     oai_chunk = _ollama_chunk_to_openai_chunk(chunk, chunk_id, prev_args_len)
@@ -468,6 +508,11 @@ class OllamaBridge(Bridge):
                 error=str(e),
                 trace=traceback.format_exc()[:1500],
             )
+            self._log_error_from_context(
+                status_code=502,
+                error_type="api_error",
+                message=str(e),
+            )
             yield {
                 "type": "raw",
                 "data": json.dumps(
@@ -484,6 +529,18 @@ class OllamaBridge(Bridge):
                     }
                 ),
             }
+
+        if chunk_count > 0 and last_chunk is not None and last_chunk.done:
+            usage = {
+                "prompt_tokens": last_chunk.prompt_eval_count or 0,
+                "completion_tokens": last_chunk.eval_count or 0,
+                "total_tokens": (last_chunk.prompt_eval_count or 0) + (last_chunk.eval_count or 0),
+            }
+            self._log_usage_from_context(
+                response_id=chunk_id,
+                usage=usage,
+                stop_reason=_map_done_reason(last_chunk.done_reason),
+            )
 
         _log_stderr(
             "info",
