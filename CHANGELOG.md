@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-05-27)
+
+### Bug Fixes
+
+- **dashboard**: Use local timezone for chart labels and table timestamps
+  ([`3d76782`](https://github.com/sdkks/7bridges/commit/3d76782412ce9542d72d4b2a268bd5dd04069649))
+
+### Features
+
+- **dashboard**: Add errors/hour chart and configurable time window
+  ([`f481e08`](https://github.com/sdkks/7bridges/commit/f481e08b870aae1eb57034bb40286a1fb1aa4a70))
+
+
 ## v1.10.0 (2026-05-27)
 
 ### Features
