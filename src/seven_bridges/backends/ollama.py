@@ -1,5 +1,7 @@
 """Ollama bridge — translates Anthropic Messages API to Ollama's native chat API."""
 
+import asyncio
+import contextlib
 import json
 import sys
 import traceback
@@ -8,9 +10,11 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
+import httpx
 from ollama import AsyncClient, ChatResponse, Image, Message, Tool
 
 from seven_bridges.backends.base import Bridge, BridgeError, VendorCapabilities
+from seven_bridges.config import settings
 from seven_bridges.models.anthropic import (
     _SIGNATURE_PLACEHOLDER,
     MessagesRequest,
@@ -79,9 +83,8 @@ def _anthropic_messages_to_ollama(
                 elif hasattr(block, "source") and block.type == "image":
                     source = block.source
                     if isinstance(source, dict) and source.get("type") == "base64":
-                        media_type = source.get("media_type", "image/jpeg")
                         data = source.get("data", "")
-                        images.append(Image(value=f"data:{media_type};base64,{data}"))
+                        images.append(Image(value=data))
                 elif hasattr(block, "tool_use_id") and block.type == "tool_result":
                     tc = block.content
                     if isinstance(tc, list):
@@ -286,7 +289,10 @@ class OllamaBridge(Bridge):
             backend_model=backend_model,
         )
         self.keep_alive = keep_alive
-        self._client = AsyncClient(host=self.api_base)
+        self._client = AsyncClient(
+            host=self.api_base,
+            timeout=httpx.Timeout(settings.ollama_timeout, connect=10.0),
+        )
 
     def _build_options(self, request: MessagesRequest) -> dict[str, Any]:
         options: dict[str, Any] = {}
@@ -499,6 +505,16 @@ class OllamaBridge(Bridge):
                         chunk_preview=str(chunk)[:500],
                         trace=traceback.format_exc()[:1200],
                     )
+        except asyncio.CancelledError:
+            _log_stderr(
+                "info",
+                "ollama stream cancelled by client disconnect",
+                model_alias=self.model_alias,
+                chunk_count=chunk_count,
+            )
+            with contextlib.suppress(Exception):
+                await asyncio.shield(stream.aclose())  # type: ignore[attr-defined]
+            raise
         except Exception as e:
             _log_stderr(
                 "error",

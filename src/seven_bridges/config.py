@@ -36,6 +36,7 @@ class Settings:
     kimi_api_key: str = os.environ.get("KIMI_CODE_API_KEY", "")
     ollama_host: str = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
     ollama_keep_alive: str = os.environ.get("OLLAMA_KEEP_ALIVE", "300s")
+    ollama_timeout: float = float(os.environ.get("OLLAMA_TIMEOUT", "120"))
     ollama_sonnet_model: str = os.environ.get("OLLAMA_SONNET_MODEL", "qwen3.6:35b-a3b-coding-nvfp4")
     ollama_sonnet_ctx: int = int(os.environ.get("OLLAMA_SONNET_CONTEXT_WINDOW", "32768"))
     ollama_haiku_model: str = os.environ.get("OLLAMA_HAIKU_MODEL", "qwen3.5:9b")
