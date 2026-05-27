@@ -133,7 +133,7 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
     <div class="filter-pills" id="filter-pills"></div>
     <div class="updated">
       <label for="window-select" class="refresh-label">Window</label>
-      <select id="window-select" onchange="changeWindow()">
+      <select id="window-select">
         <option value="1">1h</option>
         <option value="2">2h</option>
         <option value="6">6h</option>
@@ -141,7 +141,7 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
         <option value="24" selected>24h</option>
       </select>
       <label for="refresh-select" class="refresh-label">Refresh</label>
-      <select id="refresh-select" onchange="changeRefresh()">
+      <select id="refresh-select">
         <option value="0">Off</option>
         <option value="30000">30s</option>
         <option value="60000" selected>60s</option>
@@ -360,7 +360,8 @@ function drawBarChart(canvasId, data, valueKey, color, emptyId){
 
   // Bars
   for (var i = 0; i < labels.length; i++){
-    var barH = (values[i] / maxVal) * ph;
+    var rawH = (values[i] / maxVal) * ph;
+    var barH = values[i] > 0 ? Math.max(2, rawH) : 0;
     var x = pad.left + i * gap + (gap - barW) / 2;
     var y = pad.top + ph - barH;
     ctx.fillStyle = color;
@@ -458,8 +459,10 @@ function drawStackedBarChart(canvasId, data, key1, key2, color1, color2, label1,
   // Bars — stacked
   for (var i = 0; i < labels.length; i++){
     var x = pad.left + i * gap + (gap - barW) / 2;
-    var h1 = (values1[i] / maxVal) * ph;
-    var h2 = (values2[i] / maxVal) * ph;
+    var rawH1 = (values1[i] / maxVal) * ph;
+    var rawH2 = (values2[i] / maxVal) * ph;
+    var h1 = values1[i] > 0 ? Math.max(1, rawH1) : 0;
+    var h2 = values2[i] > 0 ? Math.max(1, rawH2) : 0;
     // Output (top)
     ctx.fillStyle = color2;
     ctx.fillRect(x, pad.top + ph - h1 - h2, barW, h2);
@@ -788,12 +791,6 @@ function refreshUI(){
 
 var windowHours = 24;
 
-function changeWindow(){
-  var sel = document.getElementById('window-select');
-  windowHours = parseInt(sel.value, 10);
-  fetchStats();
-}
-
 function fetchStats(){
   setStatus('fetching');
   fetch('/api/stats?hours=' + windowHours)
@@ -813,12 +810,16 @@ function fetchStats(){
 var refreshMs = 60000;
 var refreshTimer = null;
 
-function changeRefresh(){
-  var sel = document.getElementById('refresh-select');
-  refreshMs = parseInt(sel.value, 10);
+// Bind event handlers (replaces inline onchange that can't reach IIFE scope)
+document.getElementById('window-select').addEventListener('change', function(){
+  windowHours = parseInt(this.value, 10);
+  fetchStats();
+});
+document.getElementById('refresh-select').addEventListener('change', function(){
+  refreshMs = parseInt(this.value, 10);
   if (refreshTimer) clearInterval(refreshTimer);
   if (refreshMs > 0) refreshTimer = setInterval(fetchStats, refreshMs);
-}
+});
 
 // Initial fetch + start auto-refresh
 fetchStats();

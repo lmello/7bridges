@@ -326,11 +326,18 @@ def compute_stats(
         )
 
     # --- Time series (hourly buckets) ---
+    # Build buckets spanning from cutoff to now, aligned to hour boundaries.
+    # Floor cutoff to the previous full hour (inclusive), ceiling to the
+    # current full hour (inclusive).  This guarantees every filtered entry
+    # lands in a bucket regardless of timezone offset between server and UTC.
+    bucket_start = cutoff.replace(minute=0, second=0, microsecond=0)
+    bucket_end = now.replace(minute=0, second=0, microsecond=0)
     buckets: dict[str, dict[str, Any]] = {}
-    for i in range(hours):
-        hour_dt = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=i)
+    hour_dt = bucket_start
+    while hour_dt <= bucket_end:
         label = hour_dt.strftime("%Y-%m-%dT%H:00:00Z")
         buckets[label] = {"requests": 0, "tokens_in": 0, "tokens_out": 0, "cost": 0.0, "errors": 0}
+        hour_dt += timedelta(hours=1)
 
     for entry in filtered_usage:
         ts = _parse_iso(entry.get("timestamp", ""))
