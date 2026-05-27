@@ -202,7 +202,7 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
     <div class="table-wrap"><table id="table-requests"><thead></thead><tbody></tbody></table></div>
   </div>
 </main>
-<footer>7 Bridges Dashboard &middot; Auto-refreshes every 10s</footer>
+<footer>7 Bridges Dashboard</footer>
 
 <script>
 (function(){
@@ -256,6 +256,17 @@ function fmtTime(ts){
     return d.toLocaleString();
   }catch(e){
     return ts;
+  }
+}
+
+function fmtHourLabel(label){
+  // Convert ISO hour label like "2026-05-27T20:00:00Z" to local HH:00
+  try{
+    var d = new Date(label);
+    if (isNaN(d.getTime())) return label;
+    return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }catch(e){
+    return label;
   }
 }
 
@@ -361,7 +372,7 @@ function drawBarChart(canvasId, data, valueKey, color, emptyId){
       ctx.fillStyle = '#8b949e';
       ctx.font = '9px -apple-system,sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(labels[i], pad.left + i * gap + gap / 2, pad.top + ph + 14);
+      ctx.fillText(fmtHourLabel(labels[i]), pad.left + i * gap + gap / 2, pad.top + ph + 14);
     }
   }
 
@@ -461,7 +472,7 @@ function drawStackedBarChart(canvasId, data, key1, key2, color1, color2, label1,
       ctx.fillStyle = '#8b949e';
       ctx.font = '9px -apple-system,sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(labels[i], pad.left + i * gap + gap / 2, pad.top + ph + 14);
+      ctx.fillText(fmtHourLabel(labels[i]), pad.left + i * gap + gap / 2, pad.top + ph + 14);
     }
   }
 
@@ -731,25 +742,25 @@ function refreshUI(){
   // SR fallback tables
   var srReqRows = [];
   for (var i = 0; i < s.time_series.labels.length; i++){
-    srReqRows.push([s.time_series.labels[i], String(s.time_series.requests[i])]);
+    srReqRows.push([fmtHourLabel(s.time_series.labels[i]), String(s.time_series.requests[i])]);
   }
   buildSrTable('chart-reqs-table', ['Hour', 'Requests'], srReqRows);
 
   var srTokRows = [];
   for (var i = 0; i < s.time_series.labels.length; i++){
-    srTokRows.push([s.time_series.labels[i], String(s.time_series.tokens_in[i]), String(s.time_series.tokens_out[i])]);
+    srTokRows.push([fmtHourLabel(s.time_series.labels[i]), String(s.time_series.tokens_in[i]), String(s.time_series.tokens_out[i])]);
   }
   buildSrTable('chart-tokens-table', ['Hour', 'Input Tokens', 'Output Tokens'], srTokRows);
 
   var srCostRows = [];
   for (var i = 0; i < s.time_series.labels.length; i++){
-    srCostRows.push([s.time_series.labels[i], '$' + s.time_series.cost[i].toFixed(4)]);
+    srCostRows.push([fmtHourLabel(s.time_series.labels[i]), '$' + s.time_series.cost[i].toFixed(4)]);
   }
   buildSrTable('chart-cost-table', ['Hour', 'Cost'], srCostRows);
 
   var srErrRows = [];
   for (var i = 0; i < s.time_series.labels.length; i++){
-    srErrRows.push([s.time_series.labels[i], String(s.time_series.errors[i])]);
+    srErrRows.push([fmtHourLabel(s.time_series.labels[i]), String(s.time_series.errors[i])]);
   }
   buildSrTable('chart-errors-table', ['Hour', 'Errors'], srErrRows);
 

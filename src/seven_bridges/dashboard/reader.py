@@ -329,14 +329,14 @@ def compute_stats(
     buckets: dict[str, dict[str, Any]] = {}
     for i in range(hours):
         hour_dt = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=i)
-        label = hour_dt.strftime("%H:00")
+        label = hour_dt.strftime("%Y-%m-%dT%H:00:00Z")
         buckets[label] = {"requests": 0, "tokens_in": 0, "tokens_out": 0, "cost": 0.0, "errors": 0}
 
     for entry in filtered_usage:
         ts = _parse_iso(entry.get("timestamp", ""))
         if ts is None:
             continue
-        hour_label = ts.strftime("%H:00")
+        hour_label = ts.strftime("%Y-%m-%dT%H:00:00Z")
         if hour_label in buckets:
             buckets[hour_label]["requests"] += 1
             u = entry.get("usage", {})
@@ -355,7 +355,7 @@ def compute_stats(
         ts = _parse_iso(entry.get("timestamp", ""))
         if ts is None:
             continue
-        hour_label = ts.strftime("%H:00")
+        hour_label = ts.strftime("%Y-%m-%dT%H:00:00Z")
         if hour_label in buckets:
             buckets[hour_label]["errors"] += 1
 
