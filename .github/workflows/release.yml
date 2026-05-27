@@ -12,8 +12,10 @@ jobs:
     steps:
       - name: Check commit message for conventional commit keywords
         id: check
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          msg="${{ github.event.head_commit.message }}"
+          msg="$COMMIT_MSG"
           subject="$(echo "$msg" | head -1)"
           # Skip release commits to avoid recursive loops
           if echo "$subject" | grep -qE "^chore\(release\)"; then
