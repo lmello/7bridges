@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-05-27)
+
+### Features
+
+- **dashboard**: Add favicon and configurable auto-refresh
+  ([`901ccc8`](https://github.com/sdkks/7bridges/commit/901ccc8b2ae6f4757335f38b9663e52aae7145e4))
+
+
 ## v1.9.0 (2026-05-27)
 
 ### Features
