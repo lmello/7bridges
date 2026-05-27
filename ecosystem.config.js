@@ -15,12 +15,13 @@ module.exports = {
     restart_delay: 5000,
     max_memory_restart: '512M',
     watch: false,
-    // Note: BRIDGE_DEBUG is intentionally NOT set here.
-    // Debug mode disables streaming (buffers the full response),
-    // which makes Kimi and other backends feel very slow.
-    // Use `make run-debug` when you actually need request/response logging.
+    // BRIDGE_DEBUG is off by default. Debug mode disables streaming
+    // (buffers the full response), which makes Kimi and other backends
+    // feel very slow. Use `make start-debug` for long debugging sessions
+    // where you need request/response logging via pm2.
     env: {
       PYTHONPATH: 'src',
+      BRIDGE_DEBUG: process.env.BRIDGE_DEBUG || '0',
     },
   }]
 };

@@ -13,6 +13,9 @@ lock:
 start:
 	pm2 start ecosystem.config.js
 
+start-debug:
+	BRIDGE_DEBUG=1 pm2 start ecosystem.config.js
+
 stop:
 	pm2 delete 7bridges
 
