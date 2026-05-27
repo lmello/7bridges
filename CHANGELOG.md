@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v1.8.0 (2026-05-27)
+
+### Bug Fixes
+
+- **ci**: Prevent backtick command injection in release workflow
+  ([`144749e`](https://github.com/sdkks/7bridges/commit/144749e3c929f9bf03d57a2e61242075d0d6b9be))
+
+- **docs,backend**: Address PR #2 review comments
+  ([`412fc0b`](https://github.com/sdkks/7bridges/commit/412fc0b1c2e0feddac463fb622cd66442d6396c2))
+
+### Continuous Integration
+
+- Add PR checks workflow for lint and test on pull requests
+  ([`8d32de0`](https://github.com/sdkks/7bridges/commit/8d32de02bffcbcb397fa39ff8af38b21483e61a0))
+
+### Documentation
+
+- Add issue/PR templates and contributing guide
+  ([`f60a5b0`](https://github.com/sdkks/7bridges/commit/f60a5b0e510c0dec140b2fb4632890c10686cc2b))
+
+- **readme**: Add per-bridge thinking and context window notes
+  ([`fb0a48f`](https://github.com/sdkks/7bridges/commit/fb0a48fe80f53c1a11f40fa8dd771a70892c5244))
+
+### Features
+
+- **dev**: Add start-debug target for pm2-based debug sessions
+  ([`2e951d9`](https://github.com/sdkks/7bridges/commit/2e951d978507908de26f58df5e898633eeea8ec2))
+
+
 ## v1.7.0 (2026-05-22)
 
 ### Bug Fixes
