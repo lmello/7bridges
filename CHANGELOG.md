@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.0 (2026-05-27)
+
+### Features
+
+- **logging**: Add universal usage logging, cost estimation, and web dashboard
+  ([`671003a`](https://github.com/sdkks/7bridges/commit/671003ac83d0c7f26362c1bb92e7248dd23efb5e))
+
+
 ## v1.8.0 (2026-05-27)
 
 ### Bug Fixes
