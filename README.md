@@ -8,11 +8,20 @@ An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy th
 
 # What's new?
 
-Added support for SiliconFlow (MiniMax M2.5, Kimi K2.6, GLM 5.1), Fireworks AI (Kimi K2.6, MiniMax M2.7), and Ollama. Some working examples are further down.
+- Added support for SiliconFlow (MiniMax M2.5, Kimi K2.6, GLM 5.1), Fireworks AI (Kimi K2.6, MiniMax M2.7), and Ollama. Some working examples are further down.
 
+<br>
 
 https://github.com/user-attachments/assets/8e6fa365-d528-4307-ad36-61fa040a4cc2
 
+<br>
+<br>
+
+- We have a new dashboard which you can run optionally to see usage attribution and some other metrics.
+
+<br>
+
+https://github.com/user-attachments/assets/555bf70f-8017-4760-94c7-c745e95f2f33
 
 
 ## Table of Contents
