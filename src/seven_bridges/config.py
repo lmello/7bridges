@@ -89,6 +89,9 @@ class Settings:
     vision_fallback_timeout: float = float(
         os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT", "120")
     )
+    vision_fallback_ollama_ctx: int = int(
+        os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_OLLAMA_CTX", "8192")
+    )
 
     model_routes: dict[str, ModelRoute] = {
         "claude-sonnet-4-6": ModelRoute(

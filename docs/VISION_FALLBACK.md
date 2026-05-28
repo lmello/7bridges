@@ -67,6 +67,7 @@ The VL backend call is **fully independent** — it uses its own HTTP client, au
 | `SEVEN_BRIDGES_VISION_FALLBACK_ENABLED` | `false` | Enable the feature |
 | `SEVEN_BRIDGES_VISION_FALLBACK_BACKEND` | `""` | VL backend spec: `kimi/<model>` or `ollama/<model>` |
 | `SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT` | `120` | Per-image timeout in seconds |
+| `SEVEN_BRIDGES_VISION_FALLBACK_OLLAMA_CTX` | `8192` | Context window size for Ollama VL calls. Smaller values reduce memory pressure and avoid GPU deadlocks. |
 
 ### Example: Kimi K2.6 as eyes for DeepSeek
 

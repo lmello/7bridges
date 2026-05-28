@@ -150,6 +150,7 @@ async def _call_ollama_vision(
     prompt: str,
     image_data_uri: str,
     timeout: float,
+    num_ctx: int = 8192,
 ) -> str:
     """Call Ollama vision endpoint.
 
@@ -170,7 +171,7 @@ async def _call_ollama_vision(
             }
         ],
         "stream": False,
-        "keep_alive": 0,  # unload model immediately after response
+        "options": {"num_ctx": num_ctx},
     }
 
     _log_stderr(
@@ -245,6 +246,7 @@ async def _describe_image(
     prompt: str,
     image_data_uri: str,
     timeout: float,
+    num_ctx: int = 8192,
 ) -> str:
     """Route image description to the configured VL backend."""
     if backend == "kimi":
@@ -259,7 +261,7 @@ async def _describe_image(
 
     if backend == "ollama":
         host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-        return await _call_ollama_vision(host, model, prompt, image_data_uri, timeout)
+        return await _call_ollama_vision(host, model, prompt, image_data_uri, timeout, num_ctx)
 
     raise BridgeError(
         message=f"Unknown vision fallback backend: {backend}",
@@ -325,6 +327,7 @@ async def _process_message_images(
     backend: str,
     model: str,
     timeout: float,
+    num_ctx: int = 8192,
 ) -> Message:
     """Replace all ImageBlocks in a message with TextBlock descriptions."""
     if isinstance(msg.content, str):
@@ -338,7 +341,9 @@ async def _process_message_images(
                 prompt = _build_prompt_for_image(block, msg.content)
                 resized = _resize_image(data_uri)
                 try:
-                    description = await _describe_image(backend, model, prompt, resized, timeout)
+                    description = await _describe_image(
+                        backend, model, prompt, resized, timeout, num_ctx
+                    )
                 except Exception:
                     # If VL fails, replace with a fallback note so the
                     # conversation can continue rather than erroring out.
@@ -347,7 +352,9 @@ async def _process_message_images(
             else:
                 new_blocks.append(TextBlock(text="[Image: unsupported image format]"))
         elif isinstance(block, ToolResultBlock):
-            new_tool_result = await _process_tool_result_images(block, backend, model, timeout)
+            new_tool_result = await _process_tool_result_images(
+                block, backend, model, timeout, num_ctx
+            )
             new_blocks.append(new_tool_result)
         else:
             new_blocks.append(block)
@@ -360,6 +367,7 @@ async def _process_tool_result_images(
     backend: str,
     model: str,
     timeout: float,
+    num_ctx: int = 8192,
 ) -> ToolResultBlock:
     """Replace ImageBlocks inside a ToolResultBlock with TextBlock descriptions."""
     if not isinstance(block.content, list):
@@ -375,7 +383,9 @@ async def _process_tool_result_images(
                 prompt = "describe this image in detail"
                 resized = _resize_image(data_uri)
                 try:
-                    description = await _describe_image(backend, model, prompt, resized, timeout)
+                    description = await _describe_image(
+                        backend, model, prompt, resized, timeout, num_ctx
+                    )
                 except Exception:
                     description = "[Image description unavailable — vision fallback failed]"
                 new_content.append(TextBlock(text=f"[Image: {description}]"))
@@ -507,6 +517,7 @@ async def describe_images_in_request(
     backend: str,
     model: str,
     timeout: float,
+    num_ctx: int = 8192,
 ) -> MessagesRequest:
     """Replace all images in a request with VL-generated descriptions.
 
@@ -514,7 +525,7 @@ async def describe_images_in_request(
     """
     new_messages: list[Message] = []
     for msg in request.messages:
-        processed = await _process_message_images(msg, backend, model, timeout)
+        processed = await _process_message_images(msg, backend, model, timeout, num_ctx)
         new_messages.append(processed)
 
     # Rebuild the request preserving all other fields

@@ -238,6 +238,7 @@ async def messages(
                     backend=vl_backend,
                     model=vl_model,
                     timeout=settings.vision_fallback_timeout,
+                    num_ctx=settings.vision_fallback_ollama_ctx,
                 )
             else:
                 # Malformed backend spec — strip images and continue

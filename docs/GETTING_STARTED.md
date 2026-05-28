@@ -431,6 +431,7 @@ Here's what each variable does and whether you need it:
 | `SEVEN_BRIDGES_VISION_FALLBACK_ENABLED` | No | Enable experimental vision fallback. See [VISION_FALLBACK.md](VISION_FALLBACK.md). |
 | `SEVEN_BRIDGES_VISION_FALLBACK_BACKEND` | No | VL backend for vision fallback. Format: `kimi/kimi-k2-6` or `ollama/gemma4:e4b`. |
 | `SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT` | No | Timeout per image in seconds. Default: 120. |
+| `SEVEN_BRIDGES_VISION_FALLBACK_OLLAMA_CTX` | No | Context window for Ollama VL calls. Default: 8192. |
 
 ### The Two API Keys Explained
 
