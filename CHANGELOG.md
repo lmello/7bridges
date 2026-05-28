@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.14.0 (2026-05-28)
+
+### Documentation
+
+- Update example to use 4096 tokens for vision fallback
+  ([`b4c0a0c`](https://github.com/sdkks/7bridges/commit/b4c0a0c874311beb3ee3bd628673daf7ce868118))
+
+- **vision**: Document caching, parallel processing, and Ollama lifecycle
+  ([`9303aba`](https://github.com/sdkks/7bridges/commit/9303abad8bbdb7824c322503c0abf699db15c5b8))
+
+### Features
+
+- **dashboard**: Add cache visualization and server-side chart filtering
+  ([`c78b7be`](https://github.com/sdkks/7bridges/commit/c78b7be6d8eb39541b40427496d1a8540dcda0bc))
+
+
 ## v1.13.0 (2026-05-28)
 
 ### Bug Fixes
