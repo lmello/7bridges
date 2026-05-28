@@ -90,7 +90,7 @@ class Settings:
         os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT", "120")
     )
     vision_fallback_ollama_ctx: int = int(
-        os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_OLLAMA_CTX", "8192")
+        os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_OLLAMA_CTX", "4096")
     )
 
     model_routes: dict[str, ModelRoute] = {

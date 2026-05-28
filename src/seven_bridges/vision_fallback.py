@@ -9,11 +9,14 @@ See: docs/vision-fallback.md for configuration.
 
 import asyncio
 import base64
+import contextlib
+import hashlib
 import io
 import json
 import os
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -83,6 +86,65 @@ def _resize_image(base64_data: str) -> str:
     return f"data:image/jpeg;base64,{resized}"
 
 
+def _image_key(data_uri: str) -> str:
+    """Return a short hash key for deduplicating identical images."""
+    return hashlib.sha256(data_uri.encode()).hexdigest()[:16]
+
+
+# Persistent on-disk cache for image descriptions.
+# Survives across requests, sessions, and compactions.
+_VISION_CACHE_PATH: Path = Path("/tmp/ollama-vision-fallback.jsonl")
+
+
+class _VisionCache:
+    """Append-only JSONL cache: image hash -> description."""
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._data: dict[str, str] = {}
+        self._load()
+
+    def _load(self) -> None:
+        if not self._path.exists():
+            return
+        try:
+            with open(self._path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        self._data[entry["key"]] = entry["description"]
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+        except OSError:
+            pass
+
+    def get(self, key: str) -> str | None:
+        return self._data.get(key)
+
+    def set(self, key: str, description: str) -> None:
+        if key in self._data:
+            return
+        self._data[key] = description
+        try:
+            with open(self._path, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {"key": key, "description": description},
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+        except OSError:
+            # Cache write failures are non-fatal.
+            pass
+
+
+_vision_cache = _VisionCache(_VISION_CACHE_PATH)
+
+
 # ---------------------------------------------------------------------------
 # VL backend calling
 # ---------------------------------------------------------------------------
@@ -144,17 +206,45 @@ async def _call_kimi_vision(
         return str(data["choices"][0]["message"]["content"])
 
 
+def _unload_ollama_model(model: str) -> None:
+    """Unload an Ollama model via CLI. Best-effort, fire-and-forget."""
+
+    async def _do_stop() -> None:
+        proc: asyncio.subprocess.Process | None = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ollama",
+                "stop",
+                model,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(proc.wait(), timeout=10.0)
+        except TimeoutError:
+            _log_stderr("warning", "ollama stop timed out", model=model)
+            if proc is not None:
+                with contextlib.suppress(Exception):
+                    proc.kill()
+        except Exception as exc:
+            _log_stderr("warning", "ollama stop failed", model=model, error=str(exc))
+
+    asyncio.create_task(_do_stop())
+
+
 async def _call_ollama_vision(
     host: str,
     model: str,
     prompt: str,
     image_data_uri: str,
     timeout: float,
-    num_ctx: int = 8192,
+    num_ctx: int = 4096,
+    keep_alive: int | None = None,
 ) -> str:
     """Call Ollama vision endpoint.
 
     Ollama expects images as base64 strings (without data URI prefix).
+    After a successful response the model is explicitly unloaded via
+    ``ollama stop`` so it does not block GPU for the default 5 min.
     """
     # Strip data URI prefix for Ollama
     image_b64 = image_data_uri
@@ -173,6 +263,8 @@ async def _call_ollama_vision(
         "stream": False,
         "options": {"num_ctx": num_ctx},
     }
+    if keep_alive is not None:
+        payload["keep_alive"] = keep_alive
 
     _log_stderr(
         "info",
@@ -180,6 +272,7 @@ async def _call_ollama_vision(
         model=model,
         prompt_len=len(prompt),
         image_len=len(image_b64),
+        keep_alive=keep_alive,
     )
 
     async with httpx.AsyncClient() as client:
@@ -237,7 +330,12 @@ async def _call_ollama_vision(
             )
 
         data = response.json()
-        return str(data["message"]["content"])
+        result = str(data["message"]["content"])
+
+    # Unload the model immediately so it does not block GPU for 5 min.
+    _unload_ollama_model(model)
+
+    return result
 
 
 async def _describe_image(
@@ -246,9 +344,17 @@ async def _describe_image(
     prompt: str,
     image_data_uri: str,
     timeout: float,
-    num_ctx: int = 8192,
+    num_ctx: int = 4096,
+    keep_alive: int | None = None,
 ) -> str:
     """Route image description to the configured VL backend."""
+    # Check persistent cache before making any network call.
+    key = _image_key(image_data_uri)
+    cached = _vision_cache.get(key)
+    if cached is not None:
+        _log_stderr("info", "vision fallback cache hit", key=key, model=model)
+        return cached
+
     if backend == "kimi":
         api_key = os.environ.get("KIMI_CODE_API_KEY", "")
         if not api_key:
@@ -257,11 +363,17 @@ async def _describe_image(
                 status_code=503,
                 error_type="configuration_error",
             )
-        return await _call_kimi_vision(api_key, model, prompt, image_data_uri, timeout)
+        result = await _call_kimi_vision(api_key, model, prompt, image_data_uri, timeout)
+        _vision_cache.set(key, result)
+        return result
 
     if backend == "ollama":
         host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-        return await _call_ollama_vision(host, model, prompt, image_data_uri, timeout, num_ctx)
+        result = await _call_ollama_vision(
+            host, model, prompt, image_data_uri, timeout, num_ctx, keep_alive
+        )
+        _vision_cache.set(key, result)
+        return result
 
     raise BridgeError(
         message=f"Unknown vision fallback backend: {backend}",
@@ -322,42 +434,96 @@ def _image_block_to_data_uri(image_block: ImageBlock) -> str | None:
     return None
 
 
+def _message_text_context(msg: Message) -> str:
+    """Extract all text from a message to use as context for VL prompts.
+
+    When images live inside ToolResultBlocks, the original user question
+    is often in a sibling TextBlock or in an earlier message.  We collect
+    every TextBlock in the current message so the VL model gets context
+    rather than a generic "describe this image" prompt.
+    """
+    if isinstance(msg.content, str):
+        return msg.content.strip()
+    texts: list[str] = []
+    for block in msg.content:
+        if isinstance(block, TextBlock):
+            texts.append(block.text)
+        elif isinstance(block, ToolResultBlock):
+            if isinstance(block.content, str):
+                texts.append(block.content)
+            elif isinstance(block.content, list):
+                for item in block.content:
+                    if isinstance(item, TextBlock):
+                        texts.append(item.text)
+    joined = "\n".join(t.strip() for t in texts if t.strip())
+    return joined if joined else "describe this image in detail"
+
+
 async def _process_message_images(
     msg: Message,
     backend: str,
     model: str,
     timeout: float,
-    num_ctx: int = 8192,
+    num_ctx: int = 4096,
+    keep_alive: int | None = None,
 ) -> Message:
-    """Replace all ImageBlocks in a message with TextBlock descriptions."""
+    """Replace all ImageBlocks in a message with TextBlock descriptions.
+
+    Image descriptions are fetched concurrently so that N images complete
+    in roughly the time of one slow VL call, not N sequential calls.
+    """
     if isinstance(msg.content, str):
         return msg
 
+    # First pass: identify which blocks need async work and which are
+    # synchronous pass-through.
     new_blocks: list[ContentBlock] = []
-    for block in msg.content:
+    image_tasks: list[tuple[int, asyncio.Task[str]]] = []
+
+    for idx, block in enumerate(msg.content):
         if isinstance(block, ImageBlock):
             data_uri = _image_block_to_data_uri(block)
             if data_uri:
                 prompt = _build_prompt_for_image(block, msg.content)
                 resized = _resize_image(data_uri)
-                try:
-                    description = await _describe_image(
-                        backend, model, prompt, resized, timeout, num_ctx
-                    )
-                except Exception:
-                    # If VL fails, replace with a fallback note so the
-                    # conversation can continue rather than erroring out.
-                    description = "[Image description unavailable — vision fallback failed]"
-                new_blocks.append(TextBlock(text=f"[Image: {description}]"))
+                # Kick off the VL call immediately and track it by index.
+                task = asyncio.create_task(
+                    _describe_image(backend, model, prompt, resized, timeout, num_ctx, keep_alive)
+                )
+                image_tasks.append((idx, task))
+                # Placeholder — replaced after gather.
+                new_blocks.append(TextBlock(text="[Image: processing...]"))
             else:
                 new_blocks.append(TextBlock(text="[Image: unsupported image format]"))
         elif isinstance(block, ToolResultBlock):
+            # ToolResultBlocks are processed sequentially to keep the code
+            # simple; images *inside* tool results are also parallelised.
+            # Pass any message-level text as context for richer descriptions.
             new_tool_result = await _process_tool_result_images(
-                block, backend, model, timeout, num_ctx
+                block,
+                backend,
+                model,
+                timeout,
+                num_ctx,
+                keep_alive,
+                context=_message_text_context(msg),
             )
             new_blocks.append(new_tool_result)
         else:
             new_blocks.append(block)
+
+    # Await all VL calls concurrently.
+    if image_tasks:
+        results = await asyncio.gather(
+            *(task for _, task in image_tasks),
+            return_exceptions=True,
+        )
+        for (idx, _), result in zip(image_tasks, results, strict=True):
+            if isinstance(result, BaseException):
+                description = "[Image description unavailable — vision fallback failed]"
+            else:
+                description = result
+            new_blocks[idx] = TextBlock(text=f"[Image: {description}]")
 
     return Message(role=msg.role, content=new_blocks)
 
@@ -367,32 +533,47 @@ async def _process_tool_result_images(
     backend: str,
     model: str,
     timeout: float,
-    num_ctx: int = 8192,
+    num_ctx: int = 4096,
+    keep_alive: int | None = None,
+    context: str = "describe this image in detail",
 ) -> ToolResultBlock:
-    """Replace ImageBlocks inside a ToolResultBlock with TextBlock descriptions."""
+    """Replace ImageBlocks inside a ToolResultBlock with TextBlock descriptions.
+
+    Descriptions are fetched concurrently so N images finish in parallel.
+    """
     if not isinstance(block.content, list):
         return block
 
     new_content: list[TextBlock | ImageBlock] = []
-    for item in block.content:
+    image_tasks: list[tuple[int, asyncio.Task[str]]] = []
+
+    for idx, item in enumerate(block.content):
         if isinstance(item, ImageBlock):
             data_uri = _image_block_to_data_uri(item)
             if data_uri:
-                # For tool results, we don't have sibling text in the same
-                # tool result, so use the default prompt.
-                prompt = "describe this image in detail"
+                prompt = context
                 resized = _resize_image(data_uri)
-                try:
-                    description = await _describe_image(
-                        backend, model, prompt, resized, timeout, num_ctx
-                    )
-                except Exception:
-                    description = "[Image description unavailable — vision fallback failed]"
-                new_content.append(TextBlock(text=f"[Image: {description}]"))
+                task = asyncio.create_task(
+                    _describe_image(backend, model, prompt, resized, timeout, num_ctx, keep_alive)
+                )
+                image_tasks.append((idx, task))
+                new_content.append(TextBlock(text="[Image: processing...]"))
             else:
                 new_content.append(TextBlock(text="[Image: unsupported image format]"))
         else:
             new_content.append(item)
+
+    if image_tasks:
+        results = await asyncio.gather(
+            *(task for _, task in image_tasks),
+            return_exceptions=True,
+        )
+        for (idx, _), result in zip(image_tasks, results, strict=True):
+            if isinstance(result, BaseException):
+                description = "[Image description unavailable — vision fallback failed]"
+            else:
+                description = result
+            new_content[idx] = TextBlock(text=f"[Image: {description}]")
 
     return ToolResultBlock(
         tool_use_id=block.tool_use_id,
@@ -517,7 +698,8 @@ async def describe_images_in_request(
     backend: str,
     model: str,
     timeout: float,
-    num_ctx: int = 8192,
+    num_ctx: int = 4096,
+    keep_alive: int | None = None,
 ) -> MessagesRequest:
     """Replace all images in a request with VL-generated descriptions.
 
@@ -525,7 +707,7 @@ async def describe_images_in_request(
     """
     new_messages: list[Message] = []
     for msg in request.messages:
-        processed = await _process_message_images(msg, backend, model, timeout, num_ctx)
+        processed = await _process_message_images(msg, backend, model, timeout, num_ctx, keep_alive)
         new_messages.append(processed)
 
     # Rebuild the request preserving all other fields

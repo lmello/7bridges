@@ -239,6 +239,7 @@ async def messages(
                     model=vl_model,
                     timeout=settings.vision_fallback_timeout,
                     num_ctx=settings.vision_fallback_ollama_ctx,
+                    keep_alive=int(settings.vision_fallback_timeout),
                 )
             else:
                 # Malformed backend spec — strip images and continue
