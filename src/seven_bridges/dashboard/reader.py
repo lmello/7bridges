@@ -230,6 +230,7 @@ def compute_stats(
     usage_path: str | None = None,
     error_path: str | None = None,
     hours: int = 24,
+    backends: list[str] | None = None,
 ) -> dict[str, Any]:
     """Compute aggregated dashboard statistics from usage and error logs.
 
@@ -245,6 +246,7 @@ def compute_stats(
     now = datetime.now(UTC)
     cutoff = now - timedelta(hours=hours)
     bucket_hours = _bucket_hours_for_window(hours)
+    backend_set = {b.lower() for b in backends} if backends else None
 
     # ---- Time-series buckets (pre-built) ----
     bucket_start = cutoff.replace(minute=0, second=0, microsecond=0)
@@ -262,6 +264,8 @@ def compute_stats(
             "tokens_out": 0,
             "cost": 0.0,
             "errors": 0,
+            "tokens_cache_hit": 0,
+            "tokens_cache_miss": 0,
         }
         hour_dt += timedelta(hours=bucket_hours)
 
@@ -322,6 +326,12 @@ def compute_stats(
             if ts is None or ts < cutoff:
                 continue
 
+            # Backend filter gate (usage)
+            if backend_set is not None:
+                bridge = (entry.get("bridge") or "unknown").lower()
+                if bridge not in backend_set:
+                    continue
+
             recent_usage_tracker.add(entry)
             total_requests += 1
 
@@ -329,7 +339,20 @@ def compute_stats(
             total_input_tokens += pt
             total_output_tokens += ct
             cache_hit_tokens_total += cached
-            cache_miss_tokens_total += entry.get("usage", {}).get("prompt_cache_miss_tokens") or 0
+            # Per FR-1.3: cache-miss fallback chain
+            usage_for_cache: dict[str, Any] = entry.get("usage", {})
+            pcmt = usage_for_cache.get("prompt_cache_miss_tokens")
+            if pcmt is not None and pcmt >= 0:
+                cache_miss = max(0, pcmt)
+            elif (
+                usage_for_cache.get("prompt_cache_hit_tokens") is not None
+                or usage_for_cache.get("cached-prompt-tokens") is not None
+                or usage_for_cache.get("cached_tokens") is not None
+            ):
+                cache_miss = max(0, pt - cached)
+            else:
+                cache_miss = 0
+            cache_miss_tokens_total += cache_miss
 
             # Cost
             cost = _resolve_cost(entry, pt, ct, cached)
@@ -354,7 +377,7 @@ def compute_stats(
             bd["input_tokens"] += pt
             bd["output_tokens"] += ct
             bd["cache_hit_tokens"] += cached
-            bd["cache_miss_tokens"] += entry.get("usage", {}).get("prompt_cache_miss_tokens") or 0
+            bd["cache_miss_tokens"] += cache_miss
             with contextlib.suppress(TypeError, ValueError):
                 bd["cost"] += cost
             if lat is not None:
@@ -395,6 +418,8 @@ def compute_stats(
                 buckets[bucket_key]["tokens_out"] += ct
                 with contextlib.suppress(TypeError, ValueError):
                     buckets[bucket_key]["cost"] += cost
+                buckets[bucket_key]["tokens_cache_hit"] += cached
+                buckets[bucket_key]["tokens_cache_miss"] += cache_miss
 
     # ---- Error entries (streaming, all files) ----
     filtered_error_count = 0
@@ -406,6 +431,12 @@ def compute_stats(
             ts = _parse_iso(entry.get("timestamp", ""))
             if ts is None or ts < cutoff:
                 continue
+
+            # Backend filter gate (errors)
+            if backend_set is not None:
+                bridge = (entry.get("bridge") or "unknown").lower()
+                if bridge not in backend_set:
+                    continue
 
             filtered_error_count += 1
             recent_error_tracker.add(entry)
@@ -501,13 +532,17 @@ def compute_stats(
 
     # Time series
     sorted_labels = sorted(buckets.keys())
+    backend_label = ",".join(backends) if backends else "all"
     time_series: dict[str, Any] = {
         "labels": sorted_labels,
         "requests": [buckets[label]["requests"] for label in sorted_labels],
         "tokens_in": [buckets[label]["tokens_in"] for label in sorted_labels],
         "tokens_out": [buckets[label]["tokens_out"] for label in sorted_labels],
+        "tokens_cache_hit": [buckets[label]["tokens_cache_hit"] for label in sorted_labels],
+        "tokens_cache_miss": [buckets[label]["tokens_cache_miss"] for label in sorted_labels],
         "cost": [round(buckets[label]["cost"], 6) for label in sorted_labels],
         "errors": [buckets[label]["errors"] for label in sorted_labels],
+        "backend": [backend_label for _ in sorted_labels],
     }
 
     # Recent entries

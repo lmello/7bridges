@@ -27,9 +27,13 @@ def health_check() -> dict[str, str]:
 
 
 @app.get("/api/stats")
-def api_stats(hours: int = Query(default=24, ge=1, le=720)) -> JSONResponse:
+def api_stats(
+    hours: int = Query(default=24, ge=1, le=720),
+    backend: str | None = Query(default=None),
+) -> JSONResponse:
     """Return aggregated dashboard statistics as JSON."""
-    stats = compute_stats(hours=hours)
+    backends = [b.strip() for b in backend.split(",") if b.strip()] if backend else None
+    stats = compute_stats(hours=hours, backends=backends)
     return JSONResponse(content=stats)
 
 
@@ -62,6 +66,7 @@ header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;disp
 .pill{background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:20px;padding:4px 14px;font-size:0.8rem;cursor:pointer;transition:all 0.15s ease;white-space:nowrap;font-family:inherit}
 .pill:hover{background:#30363d;border-color:#d4a5ff}
 .pill.active{background:#d4a5ff20;border-color:#d4a5ff;color:#d4a5ff;font-weight:600}
+.pill:focus-visible{outline:2px solid #d4a5ff;outline-offset:2px;border-color:#d4a5ff;background:#30363d}
 .updated{display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#8b949e}
 .refresh-label{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em}
 #refresh-select{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:2px 6px;border-radius:4px;font-size:0.72rem}
@@ -89,7 +94,8 @@ main{padding:24px;max-width:1440px;margin:0 auto}
 /* Charts section */
 .charts-section{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px;margin-bottom:24px}
 .chart-panel{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:18px 20px}
-.chart-panel h2{font-size:0.9rem;font-weight:600;color:#c9d1d9;margin-bottom:12px}
+.chart-panel h2{font-size:0.9rem;font-weight:600;color:#c9d1d9;margin-bottom:4px}
+.chart-subtitle{font-size:0.72rem;color:#8b949e;margin-bottom:12px}
 .chart-wrap{position:relative;width:100%}
 .chart-wrap canvas{width:100%;height:auto;display:block}
 .chart-empty{display:flex;align-items:center;justify-content:center;height:200px;color:#484f58;font-size:0.85rem}
@@ -169,7 +175,8 @@ footer{text-align:center;padding:16px;color:#484f58;font-size:0.75rem;border-top
     </div>
     <div class="chart-panel">
       <h2>Tokens / Hour</h2>
-      <div class="chart-wrap"><canvas id="chart-tokens" role="img" aria-label="Stacked bar chart of input and output tokens per hour"></canvas></div>
+      <p class="chart-subtitle" id="chart-tokens-subtitle">Cache breakdown available for DeepSeek.</p>
+      <div class="chart-wrap"><canvas id="chart-tokens" role="img" aria-label="Stacked bar chart of cache-hit input, cache-miss input, and output tokens per hour"></canvas></div>
       <div class="sr-only" id="chart-tokens-table"></div>
       <div class="chart-empty" id="chart-tokens-empty" style="display:none">No data for the selected period</div>
     </div>
@@ -392,7 +399,7 @@ function drawBarChart(canvasId, data, valueKey, color, emptyId){
   ctx.stroke();
 }
 
-function drawStackedBarChart(canvasId, data, key1, key2, color1, color2, label1, label2, emptyId){
+function drawStackedBarChart(canvasId, data, key1, key2, key3, color1, color2, color3, label1, label2, label3, emptyId){
   var canvas = document.getElementById(canvasId);
   var empty = document.getElementById(emptyId);
   if (!canvas || !empty) return;
@@ -401,8 +408,10 @@ function drawStackedBarChart(canvasId, data, key1, key2, color1, color2, label1,
   var labels = data.labels || [];
   var values1 = data[key1] || [];
   var values2 = data[key2] || [];
+  var values3 = data[key3] || [];
+  var tokensIn = data.tokens_in || [];
   var hasData = false;
-  for (var i = 0; i < values1.length; i++){ if (values1[i] > 0 || values2[i] > 0){ hasData = true; break; } }
+  for (var i = 0; i < values1.length; i++){ if (values1[i] > 0 || values2[i] > 0 || values3[i] > 0){ hasData = true; break; } }
 
   if (!hasData || labels.length === 0){
     canvas.style.display = 'none';
@@ -430,11 +439,16 @@ function drawStackedBarChart(canvasId, data, key1, key2, color1, color2, label1,
   ctx.fillStyle = '#161b22';
   ctx.fillRect(0, 0, w, h);
 
-  // Max is sum of both series
+  // Max is sum of all three series
   var maxVal = 0;
   for (var i = 0; i < values1.length; i++){
-    var s = values1[i] + values2[i];
+    var s = values1[i] + values2[i] + values3[i];
     if (s > maxVal) maxVal = s;
+    // Also consider fallback: no cache data but has tokens
+    if (values1[i] === 0 && values2[i] === 0 && tokensIn[i] > 0){
+      var s2 = tokensIn[i] + values3[i];
+      if (s2 > maxVal) maxVal = s2;
+    }
   }
   maxVal = chartMax([maxVal], 10);
 
@@ -461,19 +475,41 @@ function drawStackedBarChart(canvasId, data, key1, key2, color1, color2, label1,
     ctx.fillText(String(lbl), pad.left - 6, y + 3);
   }
 
-  // Bars — stacked
+  // Bars — three stacked series
   for (var i = 0; i < labels.length; i++){
     var x = pad.left + i * gap + (gap - barW) / 2;
-    var rawH1 = (values1[i] / maxVal) * ph;
-    var rawH2 = (values2[i] / maxVal) * ph;
-    var h1 = values1[i] > 0 ? Math.max(1, rawH1) : 0;
-    var h2 = values2[i] > 0 ? Math.max(1, rawH2) : 0;
-    // Output (top)
-    ctx.fillStyle = color2;
-    ctx.fillRect(x, pad.top + ph - h1 - h2, barW, h2);
-    // Input (bottom)
-    ctx.fillStyle = color1;
-    ctx.fillRect(x, pad.top + ph - h1, barW, h1);
+    var cacheHit = values1[i];
+    var cacheMiss = values2[i];
+    var tokensOut = values3[i];
+    var hasCacheData = cacheHit > 0 || cacheMiss > 0;
+    // FR-2.3: when no cache data but tokens exist, render all input as cache-miss
+    var midVal = hasCacheData ? cacheMiss : (tokensIn[i] > 0 ? tokensIn[i] : 0);
+    var rawHitH = (cacheHit / maxVal) * ph;
+    var rawMissH = (midVal / maxVal) * ph;
+    var rawOutH = (tokensOut / maxVal) * ph;
+    var hitH = cacheHit > 0 ? Math.max(2, rawHitH) : 0;
+    var missH = midVal > 0 ? Math.max(2, rawMissH) : 0;
+    var outH = tokensOut > 0 ? Math.max(2, rawOutH) : 0;
+
+    // Bottom: cache-miss (or all input when no cache data)
+    var yBase = pad.top + ph;
+    if (outH > 0){
+      // Output (top)
+      ctx.fillStyle = color3;
+      ctx.fillRect(x, yBase - outH, barW, outH);
+      yBase -= outH;
+    }
+    if (missH > 0){
+      // Cache-miss (middle)
+      ctx.fillStyle = color2;
+      ctx.fillRect(x, yBase - missH, barW, missH);
+      yBase -= missH;
+    }
+    if (hitH > 0){
+      // Cache-hit (bottom)
+      ctx.fillStyle = color1;
+      ctx.fillRect(x, yBase - hitH, barW, hitH);
+    }
 
     var showLabel = labels.length <= 12 || i % Math.ceil(labels.length / 6) === 0;
     if (showLabel){
@@ -493,7 +529,7 @@ function drawStackedBarChart(canvasId, data, key1, key2, color1, color2, label1,
   ctx.lineTo(w - pad.right, pad.top + ph);
   ctx.stroke();
 
-  // Legend
+  // Legend — abbreviated labels for narrow viewports
   var lx = pad.left + 10;
   var ly = pad.top - 2;
   ctx.fillStyle = color1;
@@ -504,8 +540,12 @@ function drawStackedBarChart(canvasId, data, key1, key2, color1, color2, label1,
   ctx.fillText(label1, lx + 14, ly + 9);
 
   ctx.fillStyle = color2;
-  ctx.fillRect(lx + 60, ly, 10, 10);
-  ctx.fillText(label2, lx + 74, ly + 9);
+  ctx.fillRect(lx + 70, ly, 10, 10);
+  ctx.fillText(label2, lx + 84, ly + 9);
+
+  ctx.fillStyle = color3;
+  ctx.fillRect(lx + 140, ly, 10, 10);
+  ctx.fillText(label3, lx + 154, ly + 9);
 }
 
 /* ---- Table rendering ---- */
@@ -692,21 +732,12 @@ function buildFilterPills(){
           if (allBtn) allBtn.classList.add('active');
         }
       }
-      refreshUI();
+      fetchStats();
     });
   });
 }
 
-/* ---- Data filtering ---- */
-
-function filterByBackend(data){
-  if (activeBackends.length === 0) return data;
-  return data.filter(function(d){
-    if (d.backend) return activeBackends.indexOf(d.backend) >= 0;
-    if (d.bridge) return activeBackends.indexOf(d.bridge) >= 0;
-    return false;
-  });
-}
+/* ---- Data filtering (removed - server handles filtering now) ---- */
 
 /* ---- Main refresh ---- */
 
@@ -743,7 +774,25 @@ function refreshUI(){
 
   // Time series charts
   drawBarChart('chart-reqs', s.time_series, 'requests', '#d4a5ff', 'chart-reqs-empty');
-  drawStackedBarChart('chart-tokens', s.time_series, 'tokens_in', 'tokens_out', '#3fb950', '#d29922', 'Input', 'Output', 'chart-tokens-empty');
+  drawStackedBarChart('chart-tokens', s.time_series, 'tokens_cache_hit', 'tokens_cache_miss', 'tokens_out', '#388bfd', '#238636', '#d29922', 'Cache hit', 'Cache miss', 'Output', 'chart-tokens-empty');
+  // Dynamic subtitle update for cache data availability
+  var subtitleEl = document.getElementById('chart-tokens-subtitle');
+  if (subtitleEl){
+    var hasDeepSeek = activeBackends.length === 0;
+    if (!hasDeepSeek){
+      for (var _i = 0; _i < activeBackends.length; _i++){
+        if (activeBackends[_i].toLowerCase() === 'deepseek'){ hasDeepSeek = true; break; }
+      }
+    }
+    if (hasDeepSeek){
+      subtitleEl.textContent = 'Cache breakdown available for DeepSeek.';
+      subtitleEl.style.display = '';
+    } else {
+      subtitleEl.textContent = 'Cache data unavailable for the selected backends.';
+      subtitleEl.style.display = '';
+    }
+  }
+
   drawBarChart('chart-cost', s.time_series, 'cost', '#f0883e', 'chart-cost-empty');
   drawBarChart('chart-errors', s.time_series, 'errors', '#f85149', 'chart-errors-empty');
 
@@ -756,9 +805,9 @@ function refreshUI(){
 
   var srTokRows = [];
   for (var i = 0; i < s.time_series.labels.length; i++){
-    srTokRows.push([fmtHourLabel(s.time_series.labels[i]), String(s.time_series.tokens_in[i]), String(s.time_series.tokens_out[i])]);
+    srTokRows.push([fmtHourLabel(s.time_series.labels[i]), String(s.time_series.tokens_cache_hit[i] || 0), String(s.time_series.tokens_cache_miss[i] || 0), String(s.time_series.tokens_out[i])]);
   }
-  buildSrTable('chart-tokens-table', ['Hour', 'Input Tokens', 'Output Tokens'], srTokRows);
+  buildSrTable('chart-tokens-table', ['Hour', 'Input (cache hit)', 'Input (cache miss)', 'Output'], srTokRows);
 
   var srCostRows = [];
   for (var i = 0; i < s.time_series.labels.length; i++){
@@ -772,18 +821,12 @@ function refreshUI(){
   }
   buildSrTable('chart-errors-table', ['Hour', 'Errors'], srErrRows);
 
-  // Filtered data for tables
-  var filteredBackend = filterByBackend(s.by_backend);
-  var filteredModel = filterByBackend(s.by_model);
-  var filteredErrors = filterByBackend(s.recent_errors);
-  var filteredRequests = filterByBackend(s.recent_requests);
-
-  // Tables
-  renderTable('table-backend', COL_DEFS.backend, filteredBackend, 'backend');
-  renderTable('table-model', COL_DEFS.model, filteredModel, 'model');
+  // Tables (server pre-filters data, no client-side filtering needed)
+  renderTable('table-backend', COL_DEFS.backend, s.by_backend, 'backend');
+  renderTable('table-model', COL_DEFS.model, s.by_model, 'model');
   renderTable('table-session', COL_DEFS.session, s.by_session, 'session');
-  renderTable('table-errors', COL_DEFS.errors, filteredErrors, 'errors');
-  renderTable('table-requests', COL_DEFS.requests, filteredRequests, 'requests');
+  renderTable('table-errors', COL_DEFS.errors, s.recent_errors, 'errors');
+  renderTable('table-requests', COL_DEFS.requests, s.recent_requests, 'requests');
 
   // Collect all unique backends for filter pills (only build once)
   if (allBackends.length === 0 && s.by_backend.length > 0){
@@ -798,7 +841,11 @@ var windowHours = 24;
 
 function fetchStats(){
   setStatus('fetching');
-  fetch('/api/stats?hours=' + windowHours)
+  var url = '/api/stats?hours=' + windowHours;
+  if (activeBackends.length > 0){
+    url += '&backend=' + encodeURIComponent(activeBackends.join(','));
+  }
+  fetch(url)
     .then(function(r){ return r.json(); })
     .then(function(data){
       statsData = data;
