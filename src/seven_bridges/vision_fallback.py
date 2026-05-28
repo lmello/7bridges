@@ -7,9 +7,13 @@ and replace the ImageBlock with a TextBlock containing the description.
 See: docs/vision-fallback.md for configuration.
 """
 
+import asyncio
 import base64
 import io
+import json
 import os
+import sys
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -24,6 +28,18 @@ from seven_bridges.models.anthropic import (
     TextBlock,
     ToolResultBlock,
 )
+
+
+def _log_stderr(level: str, message: str, **details: Any) -> None:
+    entry = {
+        "ts": datetime.now(UTC).isoformat(),
+        "level": level,
+        "bridge": "vision_fallback",
+        "msg": message,
+        **details,
+    }
+    print(json.dumps(entry, ensure_ascii=False, default=str), file=sys.stderr)
+
 
 # ---------------------------------------------------------------------------
 # Image resizing
@@ -94,17 +110,28 @@ async def _call_kimi_vision(
         "max_tokens": 4096,
     }
 
+    _log_stderr(
+        "info",
+        "vision fallback kimi request",
+        model=model,
+        prompt_len=len(prompt),
+    )
+
     async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://api.kimi.com/coding/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "claude-code/0.1.0",
-            },
-            json=payload,
-            timeout=timeout,
-        )
+        try:
+            response = await client.post(
+                "https://api.kimi.com/coding/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "claude-code/0.1.0",
+                },
+                json=payload,
+                timeout=timeout,
+            )
+        except asyncio.CancelledError:
+            _log_stderr("info", "vision fallback kimi cancelled by client disconnect", model=model)
+            raise
 
         if response.status_code != 200:
             raise BridgeError(
@@ -143,14 +170,31 @@ async def _call_ollama_vision(
             }
         ],
         "stream": False,
+        "keep_alive": 0,  # unload model immediately after response
     }
 
+    _log_stderr(
+        "info",
+        "vision fallback ollama request",
+        model=model,
+        prompt_len=len(prompt),
+        image_len=len(image_b64),
+    )
+
     async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{host}/api/chat",
-            json=payload,
-            timeout=timeout,
-        )
+        try:
+            response = await client.post(
+                f"{host}/api/chat",
+                json=payload,
+                timeout=timeout,
+            )
+        except asyncio.CancelledError:
+            _log_stderr(
+                "info",
+                "vision fallback ollama cancelled by client disconnect",
+                model=model,
+            )
+            raise
 
         if response.status_code != 200:
             raise BridgeError(
