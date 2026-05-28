@@ -34,7 +34,7 @@ Claude Code → 7 Bridges → DeepSeek (blind)
                     ↓
               [ImageBlock detected, no vision support]
                     ↓
-         Kimi K2.6 or Ollama qwen3-vl:8b (VL backend)
+         Kimi K2.6 or Ollama gemma4:e4b (VL backend)
                     ↓
          [separate API call with resized image + prompt]
                     ↓
@@ -66,7 +66,7 @@ The VL backend call is **fully independent** — it uses its own HTTP client, au
 |---|---|---|
 | `SEVEN_BRIDGES_VISION_FALLBACK_ENABLED` | `false` | Enable the feature |
 | `SEVEN_BRIDGES_VISION_FALLBACK_BACKEND` | `""` | VL backend spec: `kimi/<model>` or `ollama/<model>` |
-| `SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT` | `60` | Per-image timeout in seconds |
+| `SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT` | `120` | Per-image timeout in seconds |
 
 ### Example: Kimi K2.6 as eyes for DeepSeek
 
@@ -82,8 +82,8 @@ This means: when DeepSeek (your main model) receives an image, 7 Bridges will ma
 
 ```bash
 export SEVEN_BRIDGES_VISION_FALLBACK_ENABLED=true
-export SEVEN_BRIDGES_VISION_FALLBACK_BACKEND=ollama/qwen3-vl:8b
-export SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT=60
+export SEVEN_BRIDGES_VISION_FALLBACK_BACKEND=ollama/gemma4:e4b
+export SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT=120
 ```
 
 This uses your **local Ollama instance** as the vision backend — zero per-call cost, but requires GPU/CPU resources to run the VL model.
@@ -154,7 +154,7 @@ Using Kimi as a vision fallback means every image turn costs roughly **2x** (one
 Check that `SEVEN_BRIDGES_VISION_FALLBACK_BACKEND` is set correctly with the `backend/model` format:
 - ✅ `kimi/kimi-k2-6`
 - ❌ `kimi-k2-6` (missing backend prefix)
-- ✅ `ollama/qwen3-vl:8b`
+- ✅ `ollama/gemma4:e4b`
 
 ### Timeouts on large images
 

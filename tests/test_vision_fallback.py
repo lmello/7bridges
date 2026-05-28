@@ -22,6 +22,7 @@ from seven_bridges.vision_fallback import (
     build_soft_reject_response,
     describe_images_in_request,
     request_has_video,
+    strip_images_from_request,
 )
 
 # ---------------------------------------------------------------------------
@@ -280,7 +281,7 @@ async def test_describe_images_in_tool_result():
         return_value="A red square in a tool result",
     ):
         result = await describe_images_in_request(
-            req, backend="ollama", model="qwen3-vl:8b", timeout=30.0
+            req, backend="ollama", model="gemma4:e4b", timeout=30.0
         )
 
     content = result.messages[0].content
@@ -375,3 +376,104 @@ def test_describe_images_with_real_png():
     img = Image.open(io.BytesIO(raw_resized))
     assert img.format == "JPEG"
     assert max(img.width, img.height) <= 1024
+
+
+# ---------------------------------------------------------------------------
+# strip_images_from_request
+# ---------------------------------------------------------------------------
+
+
+def test_strip_images_replaces_image_blocks():
+    """ImageBlocks are replaced with [image] placeholders."""
+    img_b64 = _make_png_image()
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[
+            Message(
+                role="user",
+                content=[
+                    TextBlock(text="What do you see?"),
+                    _make_image_block(img_b64),
+                ],
+            )
+        ],
+    )
+
+    result = strip_images_from_request(req)
+
+    assert len(result.messages) == 1
+    content = result.messages[0].content
+    assert isinstance(content, list)
+    assert len(content) == 2
+    assert isinstance(content[0], TextBlock)
+    assert content[0].text == "What do you see?"
+    assert isinstance(content[1], TextBlock)
+    assert content[1].text == "[image]"
+
+
+def test_strip_images_in_tool_result():
+    """Images inside ToolResultBlock are also replaced."""
+    img_b64 = _make_png_image()
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[
+            Message(
+                role="user",
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="tool_1",
+                        content=[
+                            TextBlock(text="Here is the screenshot:"),
+                            _make_image_block(img_b64),
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+
+    result = strip_images_from_request(req)
+
+    content = result.messages[0].content
+    assert isinstance(content, list)
+    tool_result = content[0]
+    assert isinstance(tool_result, ToolResultBlock)
+    assert isinstance(tool_result.content, list)
+    assert isinstance(tool_result.content[0], TextBlock)
+    assert tool_result.content[0].text == "Here is the screenshot:"
+    assert isinstance(tool_result.content[1], TextBlock)
+    assert tool_result.content[1].text == "[image]"
+
+
+def test_strip_images_preserves_other_fields():
+    """Non-image fields in MessagesRequest are preserved."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content=[TextBlock(text="Hello")])],
+        max_tokens=512,
+        temperature=0.7,
+        system="Be helpful.",
+    )
+
+    result = strip_images_from_request(req)
+
+    assert result.max_tokens == 512
+    assert result.temperature == 0.7
+    assert result.system == "Be helpful."
+    assert len(result.messages) == 1
+
+
+def test_strip_images_no_images_unchanged():
+    """Requests without images pass through unchanged."""
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content=[TextBlock(text="Just text")])],
+    )
+
+    result = strip_images_from_request(req)
+
+    assert len(result.messages) == 1
+    content = result.messages[0].content
+    assert isinstance(content, list)
+    assert isinstance(content[0], TextBlock)
+    assert content[0].text == "Just text"

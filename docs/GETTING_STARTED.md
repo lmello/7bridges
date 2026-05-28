@@ -429,8 +429,8 @@ Here's what each variable does and whether you need it:
 | `OLLAMA_GEMMA_CONTEXT_WINDOW` | Only for Ollama | Context window for `ollama-gemma`. Default: `65536`. |
 | `OLLAMA_KEEP_ALIVE` | Only for Ollama | How long to keep model loaded in memory. |
 | `SEVEN_BRIDGES_VISION_FALLBACK_ENABLED` | No | Enable experimental vision fallback. See [VISION_FALLBACK.md](VISION_FALLBACK.md). |
-| `SEVEN_BRIDGES_VISION_FALLBACK_BACKEND` | No | VL backend for vision fallback. Format: `kimi/kimi-k2-6` or `ollama/qwen3-vl:8b`. |
-| `SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT` | No | Timeout per image in seconds. Default: 60. |
+| `SEVEN_BRIDGES_VISION_FALLBACK_BACKEND` | No | VL backend for vision fallback. Format: `kimi/kimi-k2-6` or `ollama/gemma4:e4b`. |
+| `SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT` | No | Timeout per image in seconds. Default: 120. |
 
 ### The Two API Keys Explained
 

@@ -32,6 +32,7 @@ from seven_bridges.vision_fallback import (
     build_soft_reject_response,
     describe_images_in_request,
     request_has_video,
+    strip_images_from_request,
 )
 
 
@@ -196,10 +197,7 @@ async def messages(
     bridge.usage_context = {
         "session_id": request.headers.get("x-claude-code-session-id"),
         "client_app": request.headers.get("x-app")
-        or (
-            "cli" if "claude-cli" in (request.headers.get("user-agent") or "")
-            else None
-        ),
+        or ("cli" if "claude-cli" in (request.headers.get("user-agent") or "") else None),
         "user_agent": request.headers.get("user-agent"),
         "api_key_prefix": api_key[:8] if api_key else None,
         "stream": bool(anthropic_request.stream),
@@ -223,9 +221,15 @@ async def messages(
     has_video = request_has_video(anthropic_request)
 
     if (has_images or has_video) and not bridge.capabilities.supports_vision:
+        # Video is not implemented — always soft-reject
+        if has_video:
+            return JSONResponse(
+                content=build_soft_reject_response(route.backend_model, has_video=True),
+            )
+
         # Vision fallback — experimental "See No Evil, Hear No Evil" feature
-        if settings.vision_fallback_enabled and has_images and settings.vision_fallback_backend:
-            # Parse backend spec: "kimi/kimi-k2-6" or "ollama/qwen3-vl:8b"
+        if settings.vision_fallback_enabled and settings.vision_fallback_backend:
+            # Parse backend spec: "kimi/kimi-k2-6" or "ollama/gemma4:e4b"
             parts = settings.vision_fallback_backend.split("/", 1)
             if len(parts) == 2:
                 vl_backend, vl_model = parts
@@ -236,15 +240,12 @@ async def messages(
                     timeout=settings.vision_fallback_timeout,
                 )
             else:
-                # Malformed backend spec — fall through to soft reject
-                return JSONResponse(
-                    content=build_soft_reject_response(route.backend_model, has_video),
-                )
+                # Malformed backend spec — strip images and continue
+                anthropic_request = strip_images_from_request(anthropic_request)
         else:
-            # Soft reject: return 200 with guidance instead of 400 fatal error
-            return JSONResponse(
-                content=build_soft_reject_response(route.backend_model, has_video),
-            )
+            # Vision fallback disabled — strip images from request so
+            # conversations with image history can continue
+            anthropic_request = strip_images_from_request(anthropic_request)
 
     # Pass debug log path to bridge for outgoing request logging
     bridge._debug_log_path = getattr(request.state, "debug_log_path", None)

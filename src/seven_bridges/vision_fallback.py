@@ -186,7 +186,7 @@ async def _call_ollama_vision(
             response = await client.post(
                 f"{host}/api/chat",
                 json=payload,
-                timeout=timeout,
+                timeout=httpx.Timeout(timeout, connect=10.0),
             )
         except asyncio.CancelledError:
             _log_stderr(
@@ -195,8 +195,40 @@ async def _call_ollama_vision(
                 model=model,
             )
             raise
+        except httpx.TimeoutException:
+            _log_stderr(
+                "error",
+                "vision fallback ollama timed out",
+                model=model,
+                timeout=timeout,
+            )
+            raise BridgeError(
+                message=f"Ollama vision fallback timed out after {timeout}s",
+                status_code=504,
+                error_type="timeout_error",
+            ) from None
+        except Exception as exc:
+            _log_stderr(
+                "error",
+                "vision fallback ollama request failed",
+                model=model,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            raise BridgeError(
+                message=f"Ollama vision fallback error: {exc}",
+                status_code=502,
+                error_type="api_error",
+            ) from exc
 
         if response.status_code != 200:
+            _log_stderr(
+                "error",
+                "vision fallback ollama bad status",
+                model=model,
+                status_code=response.status_code,
+                response_preview=response.text[:500],
+            )
             raise BridgeError(
                 message=f"Ollama vision fallback failed: {response.text}",
                 status_code=response.status_code,
@@ -409,6 +441,65 @@ def build_soft_reject_response(backend_model: str, has_video: bool = False) -> d
         "stop_sequence": None,
         "usage": {"input_tokens": 0, "output_tokens": len(message.split())},
     }
+
+
+def _strip_message_images(msg: Message) -> Message:
+    """Replace ImageBlocks with placeholder TextBlocks (no external calls)."""
+    if isinstance(msg.content, str):
+        return msg
+
+    new_blocks: list[ContentBlock] = []
+    for block in msg.content:
+        if isinstance(block, ImageBlock):
+            new_blocks.append(TextBlock(text="[image]"))
+        elif isinstance(block, ToolResultBlock):
+            if isinstance(block.content, list):
+                new_tool_content: list[TextBlock | ImageBlock] = []
+                for item in block.content:
+                    if isinstance(item, ImageBlock):
+                        new_tool_content.append(TextBlock(text="[image]"))
+                    else:
+                        new_tool_content.append(item)
+                new_blocks.append(
+                    ToolResultBlock(
+                        tool_use_id=block.tool_use_id,
+                        content=new_tool_content,
+                        is_error=block.is_error,
+                    )
+                )
+            else:
+                new_blocks.append(block)
+        else:
+            new_blocks.append(block)
+
+    return Message(role=msg.role, content=new_blocks)
+
+
+def strip_images_from_request(request: MessagesRequest) -> MessagesRequest:
+    """Remove all images from a request, replacing them with [image] placeholders.
+
+    Used when vision fallback is disabled so conversations with image history
+    can continue against non-vision backends.
+    """
+    new_messages: list[Message] = []
+    for msg in request.messages:
+        new_messages.append(_strip_message_images(msg))
+
+    return MessagesRequest(
+        model=request.model,
+        messages=new_messages,
+        max_tokens=request.max_tokens,
+        system=request.system,
+        metadata=request.metadata,
+        stop_sequences=request.stop_sequences,
+        stream=request.stream,
+        temperature=request.temperature,
+        top_p=request.top_p,
+        top_k=request.top_k,
+        tool_choice=request.tool_choice,
+        tools=request.tools,
+        thinking=request.thinking,
+    )
 
 
 async def describe_images_in_request(

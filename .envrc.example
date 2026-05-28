@@ -19,7 +19,7 @@ export BRIDGE_API_KEY=ollama
 # When disabled (default), image requests to non-vision backends get a
 # soft 200 rejection with guidance to use OCR/DOM methods.
 # export SEVEN_BRIDGES_VISION_FALLBACK_ENABLED=true
-# export SEVEN_BRIDGES_VISION_FALLBACK_BACKEND=kimi/kimi-k2-6
-# export SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT=60
+# export SEVEN_BRIDGES_VISION_FALLBACK_BACKEND=ollama/gemma4:e4b
+# export SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT=120
 
 PATH_add .venv/bin

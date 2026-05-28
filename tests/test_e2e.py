@@ -204,10 +204,34 @@ def test_deepseek_tool_call_non_streaming():
 
 
 @respx.mock
-def test_deepseek_soft_rejects_images(monkeypatch):
-    """Non-vision backends return 200 with guidance instead of fatal 400."""
-    # Disable vision fallback to always test the soft-reject path
+@respx.mock
+def test_deepseek_strips_images_when_fallback_disabled(monkeypatch):
+    """Non-vision backends strip images and continue when fallback is disabled."""
     monkeypatch.setattr(settings, "vision_fallback_enabled", False)
+    route = respx.post("https://api.deepseek.com/beta/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-ds-sr",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "deepseek-chat",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "I see text."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 3,
+                    "total_tokens": 13,
+                },
+            },
+        )
+    )
+
     resp = client.post(
         "/v1/messages",
         headers=_auth_headers(),
@@ -237,8 +261,13 @@ def test_deepseek_soft_rejects_images(monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["type"] == "message"
-    assert "vision_in" in data["content"][0]["text"].lower()
-    assert "ocr" in data["content"][0]["text"].lower()
+    assert data["content"][0]["text"] == "I see text."
+
+    # Verify the image was stripped from the upstream request
+    upstream_body = json.loads(route.calls.last.request.content)
+    user_msg = upstream_body["messages"][0]
+    assert user_msg["role"] == "user"
+    assert "[image]" in str(user_msg["content"])
 
 
 @respx.mock
@@ -1441,9 +1470,34 @@ def test_siliconflow_upstream_error():
 
 
 @respx.mock
-def test_siliconflow_soft_rejects_images(monkeypatch):
-    """Non-vision backends return 200 with guidance instead of fatal 400."""
+@respx.mock
+def test_siliconflow_strips_images_when_fallback_disabled(monkeypatch):
+    """Non-vision backends strip images and continue when fallback is disabled."""
     monkeypatch.setattr(settings, "vision_fallback_enabled", False)
+    route = respx.post("https://api.siliconflow.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-sf-sr",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "MiniMaxAI/MiniMax-M2.5",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "I see text."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 3,
+                    "total_tokens": 13,
+                },
+            },
+        )
+    )
+
     resp = client.post(
         "/v1/messages",
         headers=_auth_headers(),
@@ -1473,8 +1527,13 @@ def test_siliconflow_soft_rejects_images(monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["type"] == "message"
-    assert "vision_in" in data["content"][0]["text"].lower()
-    assert "ocr" in data["content"][0]["text"].lower()
+    assert data["content"][0]["text"] == "I see text."
+
+    # Verify the image was stripped from the upstream request
+    upstream_body = json.loads(route.calls.last.request.content)
+    user_msg = upstream_body["messages"][0]
+    assert user_msg["role"] == "user"
+    assert "[image]" in str(user_msg["content"])
 
 
 @respx.mock
@@ -2001,9 +2060,34 @@ def test_fireworks_thinking_disabled():
 
 
 @respx.mock
-def test_fireworks_soft_rejects_images(monkeypatch):
-    """Non-vision backends return 200 with guidance instead of fatal 400."""
+@respx.mock
+def test_fireworks_strips_images_when_fallback_disabled(monkeypatch):
+    """Non-vision backends strip images and continue when fallback is disabled."""
     monkeypatch.setattr(settings, "vision_fallback_enabled", False)
+    route = respx.post(_FW_BASE).mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-fw-sr",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "accounts/fireworks/models/minimax-m2p7",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "I see text."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 3,
+                    "total_tokens": 13,
+                },
+            },
+        )
+    )
+
     resp = client.post(
         "/v1/messages",
         headers=_auth_headers(),
@@ -2033,7 +2117,13 @@ def test_fireworks_soft_rejects_images(monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["type"] == "message"
-    assert "vision_in" in data["content"][0]["text"].lower()
+    assert data["content"][0]["text"] == "I see text."
+
+    # Verify the image was stripped from the upstream request
+    upstream_body = json.loads(route.calls.last.request.content)
+    user_msg = upstream_body["messages"][0]
+    assert user_msg["role"] == "user"
+    assert "[image]" in str(user_msg["content"])
 
 
 @respx.mock

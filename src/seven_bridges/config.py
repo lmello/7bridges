@@ -87,7 +87,7 @@ class Settings:
     )
     vision_fallback_backend: str = os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_BACKEND", "")
     vision_fallback_timeout: float = float(
-        os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT", "60")
+        os.environ.get("SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT", "120")
     )
 
     model_routes: dict[str, ModelRoute] = {
