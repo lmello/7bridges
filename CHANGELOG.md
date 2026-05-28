@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.13.0 (2026-05-28)
+
+### Bug Fixes
+
+- **ollama**: Add logging, keep_alive, and cancellation to vision fallback
+  ([`b51f94b`](https://github.com/sdkks/7bridges/commit/b51f94bcaa85afd74954259568fa29cfd40a14ba))
+
+### Features
+
+- **vision**: Change default VL model to gemma4:e4b, fix soft reject bug
+  ([`b5176e2`](https://github.com/sdkks/7bridges/commit/b5176e20095db3720bbd691cbdc96e4848c2c6aa))
+
+- **vision**: Parallel VL calls, persistent cache, and context prompts
+  ([`798e730`](https://github.com/sdkks/7bridges/commit/798e730525cbc2ab487139d994b8bb8c2d650dc9))
+
+- **vision**: Parameterize Ollama ctx window and remove keep_alive for VL
+  ([`c3273e0`](https://github.com/sdkks/7bridges/commit/c3273e0f2860fe5b4004f3f6e0e96e8470ce63e8))
+
+
 ## v1.12.0 (2026-05-27)
 
 ### Features
