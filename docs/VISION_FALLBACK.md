@@ -131,13 +131,50 @@ The conversation continues rather than halting. This is a deliberate choice: a d
 video_in is not implemented for model {backend_model}. No plans for video support at this time.
 ```
 
+## Image deduplication and caching
+
+Identical images (same SHA256 hash of the resized JPEG) are cached in an append-only JSONL file at `/tmp/ollama-vision-fallback.jsonl`. Before making any VL backend call, 7 Bridges checks this cache. A cache hit returns instantly — no API call, no GPU usage, no cost.
+
+The cache survives across:
+
+- **Multiple requests** within the same session
+- **Claude Code restarts and compactions** (when images are re-sent from history)
+- **7 Bridges restarts** (module reloads the file on startup)
+- **System reboots** (until macOS cleans `/tmp`)
+
+This eliminates redundant VL calls when:
+- Claude Code re-sends the same screenshot from cached conversation history (e.g. after compaction)
+- The same file is read from multiple paths (e.g. `/tmp/` and `/private/tmp/` on macOS, which are the same location)
+
+To inspect the cache:
+
+```bash
+cat /tmp/ollama-vision-fallback.jsonl | jq .
+```
+
+## Parallel image processing
+
+Images within a single message are processed **concurrently** via `asyncio.gather`. This means N images complete in roughly the time of one slow VL call, not N sequential calls. Images inside `tool_result` blocks are also parallelised.
+
+Before this change, two images in one request could take ~94s (47s each), exceeding Claude Code's API timeout. With parallel processing, the same request completes in ~47s.
+
+## Ollama model lifecycle
+
+When the VL backend is Ollama, the bridge manages the model lifecycle to avoid GPU blocking:
+
+1. The vision call sends `keep_alive` set to the timeout value (default 120s) as a safety net.
+2. After the response returns, `ollama stop <model>` is called via subprocess to **immediately** unload the model and free GPU memory.
+3. If `ollama stop` fails for any reason, the `keep_alive` safety net ensures the model unloads after the timeout period (not Ollama's default 5 minutes).
+
+**Cold start note:** `keep_alive: 0` (immediate unload) on a cold model causes a known [Ollama bug](https://github.com/ollama/ollama/issues/14364) where vision models enter a permanent "stopping" state. The `keep_alive` safety net + manual `ollama stop` pattern avoids this.
+
 ## Performance notes
 
 - **Image resizing** is done in-memory via Pillow before the VL call
-- **Each image triggers one separate VL backend call** — if you send 3 images, 3 independent API calls are made
-- **Timeout is per-image**, not per-request — total worst-case time is N × timeout
+- **Images are processed in parallel** within messages — N images complete in ~1× time, not N× time
+- **Cache deduplication** — identical images hit the persistent cache, avoiding any VL call
+- **Timeout is per-image**, not per-request — and concurrent processing makes this largely academic
 - **Large screenshots** (e.g. Playwright full-page captures) are automatically downsized to prevent payload timeouts
-- **Async**: VL calls are made concurrently within the request handler
 
 ## Cost considerations
 
@@ -163,6 +200,23 @@ The default resize (max 1024px, JPEG 85) handles most screenshots. If you still 
 - Lower `SEVEN_BRIDGES_VISION_FALLBACK_TIMEOUT` won't help — increase it instead
 - Or set `SEVEN_BRIDGES_VL_MAX_DIMENSION=512` for more aggressive downsizing
 - Or set `SEVEN_BRIDGES_VL_JPEG_QUALITY=70` for smaller payloads
+
+### Ollama model enters "stopping" state and never responds
+
+This is a [known Ollama bug](https://github.com/ollama/ollama/issues/14364) affecting vision models. The bridge avoids `keep_alive: 0` on cold starts to prevent this. If it still occurs, try:
+- Restarting Ollama (`ollama serve`)
+- Pulling a different VL model (`ollama pull qwen3-vl:8b`)
+- Upgrading or downgrading Ollama
+
+### Cache has stale or incorrect descriptions
+
+Delete the cache file and it will rebuild on the next vision call:
+
+```bash
+rm /tmp/ollama-vision-fallback.jsonl
+```
+
+The cache is per-machine in `/tmp` and is automatically cleaned on reboot.
 
 ### Kimi returns 403
 
