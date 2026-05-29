@@ -393,6 +393,16 @@ def test_openai_to_anthropic_usage_with_cache():
     resp = openai_to_anthropic(data, "claude-opus-4-6")
     assert resp.usage.cache_read_input_tokens == 60
 
+    # MiMo style cache (nested in prompt_tokens_details)
+    data["usage"] = {
+        "prompt_tokens": 100,
+        "completion_tokens": 10,
+        "total_tokens": 110,
+        "prompt_tokens_details": {"cached_tokens": 70},
+    }
+    resp = openai_to_anthropic(data, "mimo-v2.5-pro")
+    assert resp.usage.cache_read_input_tokens == 70
+
 
 def test_openai_to_anthropic_finish_reason_mapping():
     for openai_reason, anthropic_reason in [

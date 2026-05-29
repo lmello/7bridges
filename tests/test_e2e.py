@@ -2173,6 +2173,365 @@ def test_fireworks_minimax_non_streaming():
 
 
 # ---------------------------------------------------------------------------
+# MiMo e2e tests
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+def test_mimo_non_streaming_text():
+    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-mimo-1",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "mimo-v2.5-pro",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Hello from MiMo!"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "mimo-v2.5-pro",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "message"
+    assert data["model"] == "mimo-v2.5-pro"
+    assert len(data["content"]) == 1
+    assert data["content"][0]["type"] == "text"
+    assert data["content"][0]["text"] == "Hello from MiMo!"
+    assert data["stop_reason"] == "end_turn"
+    assert data["usage"]["input_tokens"] == 10
+    assert data["usage"]["output_tokens"] == 5
+
+    # Verify the upstream request
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["model"] == "mimo-v2.5-pro"
+    assert upstream["messages"][0]["role"] == "user"
+    # Verify MiMo uses api-key header
+    assert respx.routes[0].calls[0].request.headers["api-key"] == "test-mimo-key"
+
+
+@respx.mock
+def test_mimo_streaming_text():
+    chunks = [
+        json.dumps(
+            {
+                "id": "chatcmpl-mimo-2",
+                "choices": [{"delta": {"content": "Hello"}, "finish_reason": None}],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-mimo-2",
+                "choices": [{"delta": {"content": " world"}, "finish_reason": "stop"}],
+            }
+        ),
+    ]
+
+    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            text="".join(f"data:{c}\n\n" for c in chunks) + "data:[DONE]\n\n",
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "mimo-v2.5-pro",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "text/event-stream"
+
+    events = _parse_sse(resp.text)
+    assert events[0][0] == "message_start"
+    assert events[0][1]["message"]["model"] == "mimo-v2.5-pro"
+
+    text_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "text_delta"
+    ]
+    assert "".join(d[1]["delta"]["text"] for d in text_deltas) == "Hello world"
+
+    # Verify the upstream request is correct
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["model"] == "mimo-v2.5-pro"
+    assert upstream["stream"] is True
+    assert respx.routes[0].calls[0].request.headers["api-key"] == "test-mimo-key"
+
+
+@respx.mock
+def test_mimo_with_reasoning():
+    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-mimo-3",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "mimo-v2.5-pro",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "Hello!",
+                            "reasoning_content": "The user is greeting me.",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 8,
+                    "total_tokens": 18,
+                    "completion_tokens_details": {"reasoning_tokens": 5},
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "mimo-v2.5-pro",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["model"] == "mimo-v2.5-pro"
+    # reasoning_content → thinking block first, then text
+    assert len(data["content"]) == 2
+    assert data["content"][0]["type"] == "thinking"
+    assert data["content"][0]["thinking"] == "The user is greeting me."
+    assert data["content"][1]["type"] == "text"
+    assert data["content"][1]["text"] == "Hello!"
+
+
+@respx.mock
+def test_mimo_streaming_with_reasoning():
+    chunks = [
+        json.dumps(
+            {
+                "id": "chatcmpl-mimo-4",
+                "choices": [{"delta": {"reasoning_content": "The user"}, "finish_reason": None}],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-mimo-4",
+                "choices": [
+                    {"delta": {"reasoning_content": " wants a greeting."}, "finish_reason": None}
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-mimo-4",
+                "choices": [{"delta": {"content": "Hello"}, "finish_reason": None}],
+            }
+        ),
+        json.dumps(
+            {
+                "id": "chatcmpl-mimo-4",
+                "choices": [{"delta": {"content": " there!"}, "finish_reason": "stop"}],
+            }
+        ),
+    ]
+
+    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            text="".join(f"data:{c}\n\n" for c in chunks) + "data:[DONE]\n\n",
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "mimo-v2.5-pro",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+
+    thinking_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "thinking_delta"
+    ]
+    assert "".join(d[1]["delta"]["thinking"] for d in thinking_deltas) == (
+        "The user wants a greeting."
+    )
+
+    text_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "text_delta"
+    ]
+    assert "".join(d[1]["delta"]["text"] for d in text_deltas) == "Hello there!"
+
+
+@respx.mock
+def test_mimo_with_prompt_cache_key():
+    """Verify prompt_cache_key is forwarded to MiMo upstream."""
+    route = respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-mimo-5",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "mimo-v2.5-pro",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Cached response"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                    "prompt_tokens_details": {"cached_tokens": 8},
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers={
+            "x-api-key": API_KEY,
+            "Content-Type": "application/json",
+            "x-claude-code-session-id": "session-abc-123",
+        },
+        json={
+            "model": "mimo-v2.5-pro",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["usage"]["cache_read_input_tokens"] == 8
+
+    upstream = json.loads(route.calls[0].request.content)
+    assert upstream["prompt_cache_key"] == "session-abc-123"
+
+
+@respx.mock
+def test_mimo_v2_5_base_model():
+    """Verify the base mimo-v2.5 model routes correctly."""
+    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "chatcmpl-mimo-6",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "mimo-v2.5",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Hello from MiMo v2.5!"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "mimo-v2.5",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["model"] == "mimo-v2.5"
+    assert data["content"][0]["text"] == "Hello from MiMo v2.5!"
+
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["model"] == "mimo-v2.5"
+
+
+@respx.mock
+def test_mimo_upstream_error_mapping():
+    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+        return_value=Response(429, text="Too many requests"),
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "mimo-v2.5-pro",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 100,
+        },
+    )
+
+    assert resp.status_code == 429
+    assert resp.json()["error"]["type"] == "rate_limit_error"
+
+
+# ---------------------------------------------------------------------------
 # Common e2e tests
 # ---------------------------------------------------------------------------
 
@@ -2225,6 +2584,8 @@ def test_list_models():
     assert "siliconflow-glm-5.1" in model_ids
     assert "fireworks-kimi-k2p6" in model_ids
     assert "fireworks-minimax-m2p7" in model_ids
+    assert "mimo-v2.5-pro" in model_ids
+    assert "mimo-v2.5" in model_ids
 
 
 def test_health():

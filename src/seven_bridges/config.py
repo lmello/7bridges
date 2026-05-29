@@ -14,6 +14,11 @@ PRICING: dict[str, dict[str, dict[str, float]]] = {
     "ollama": {
         "*": {"input": 0.0, "output": 0.0, "cache_read": 0.0},
     },
+    "mimo": {
+        "mimo-v2.5-pro": {"input": 0.40, "output": 4.00, "cache_read": 0.15},
+        "mimo-v2.5": {"input": 0.14, "output": 1.10, "cache_read": 0.014},
+        "*": {"input": 0.40, "output": 4.00, "cache_read": 0.15},
+    },
     "*": {
         "*": {"input": 0.40, "output": 4.00, "cache_read": 0.15},
     },
@@ -79,6 +84,7 @@ class Settings:
     ollama_gemma_ctx: int = int(os.environ.get("OLLAMA_GEMMA_CONTEXT_WINDOW", "65536"))
     siliconflow_api_key: str = os.environ.get("SILICONFLOW_API_KEY", "")
     fireworks_api_key: str = os.environ.get("FIREWORKSAI_API_KEY", "")
+    mimo_api_key: str = os.environ.get("MIMO_API_KEY", "")
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     # Vision fallback — experimental "See No Evil, Hear No Evil" feature
@@ -225,6 +231,22 @@ class Settings:
             backend_model="accounts/fireworks/models/minimax-m2p7",
             display_name="MiniMax M2.7 (Fireworks AI)",
             context_window=204_800,
+            max_output_tokens=131_072,
+        ),
+        "mimo-v2.5-pro": ModelRoute(
+            alias="mimo-v2.5-pro",
+            bridge="mimo",
+            backend_model="mimo-v2.5-pro",
+            display_name="MiMo V2.5 Pro (Xiaomi)",
+            context_window=1_000_000,
+            max_output_tokens=131_072,
+        ),
+        "mimo-v2.5": ModelRoute(
+            alias="mimo-v2.5",
+            bridge="mimo",
+            backend_model="mimo-v2.5",
+            display_name="MiMo V2.5 (Xiaomi)",
+            context_window=1_000_000,
             max_output_tokens=131_072,
         ),
     }

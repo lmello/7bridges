@@ -25,7 +25,7 @@ def _openai_finish_to_anthropic(finish_reason: str | None) -> str | None:
     return mapping.get(finish_reason or "")
 
 
-def _convert_usage(usage: CompletionUsage | None) -> Usage:
+def _convert_usage(usage: CompletionUsage | None, raw_usage: dict[str, Any] | None = None) -> Usage:
     """Convert OpenAI usage to Anthropic usage."""
     if usage is None:
         return Usage(input_tokens=0, output_tokens=0)
@@ -35,6 +35,13 @@ def _convert_usage(usage: CompletionUsage | None) -> Usage:
         cache_read = usage.prompt_cache_hit_tokens
     elif usage.cached_tokens:
         cache_read = usage.cached_tokens
+    elif raw_usage:
+        # Some providers (MiMo) nest cached_tokens inside prompt_tokens_details
+        details = raw_usage.get("prompt_tokens_details", {})
+        if isinstance(details, dict):
+            cached = details.get("cached_tokens")
+            if cached is not None:
+                cache_read = cached
 
     return Usage(
         input_tokens=usage.prompt_tokens,
@@ -85,5 +92,5 @@ def openai_to_anthropic(data: dict[str, Any], model_alias: str) -> MessagesRespo
             "Literal['end_turn', 'max_tokens', 'stop_sequence', 'tool_use'] | None",
             _openai_finish_to_anthropic(choice.finish_reason),
         ),
-        usage=_convert_usage(response.usage),
+        usage=_convert_usage(response.usage, data.get("usage")),
     )

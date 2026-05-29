@@ -104,3 +104,15 @@ class TestGetPricing:
         # If a model-specific entry exists, it should be found
         assert "deepseek" in PRICING
         assert "*" in PRICING["deepseek"]
+
+    def test_mimo_pricing_pro(self) -> None:
+        pricing = get_pricing(backend="mimo", model_alias="mimo-v2.5-pro")
+        assert pricing["input"] == 0.40
+        assert pricing["output"] == 4.00
+        assert pricing["cache_read"] == 0.15
+
+    def test_mimo_pricing_base(self) -> None:
+        pricing = get_pricing(backend="mimo", model_alias="mimo-v2.5")
+        assert pricing["input"] == 0.14
+        assert pricing["output"] == 1.10
+        assert pricing["cache_read"] == 0.014
