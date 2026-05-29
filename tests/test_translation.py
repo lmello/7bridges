@@ -999,7 +999,8 @@ def test_cache_control_forwarded_on_tool_result():
 
 
 def test_cache_control_forwarded_on_system_prompt():
-    """cache_control on system TextBlock preserved as content array."""
+    """System prompt is collapsed to string (preserves tokenization for caching).
+    cache_control on individual blocks is lost, but backends use auto-detection."""
     req = MessagesRequest(
         model="claude-sonnet-4-6",
         messages=[Message(role="user", content="hi")],
@@ -1010,8 +1011,8 @@ def test_cache_control_forwarded_on_system_prompt():
     )
     result = anthropic_to_openai(req, "deepseek")
     sys_msg = result.messages[0]
-    assert isinstance(sys_msg["content"], list)
-    assert sys_msg["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert isinstance(sys_msg["content"], str)
+    assert sys_msg["content"] == "cached system"
 
 
 def test_cache_control_disabled_when_flag_off():

@@ -276,32 +276,20 @@ def anthropic_to_openai(
     """Translate an Anthropic MessagesRequest to an OpenAI ChatCompletionRequest."""
     messages: list[dict[str, Any]] = []
 
-    # System prompt goes first as a system message
+    # System prompt goes first as a system message.
+    # Always collapse to a plain string to avoid changing tokenization,
+    # which would break prefix-based caching on backends like DeepSeek.
+    # Individual cache_control markers on system blocks are lost, but
+    # backends use automatic prefix detection on the string content.
     if request.system:
         if isinstance(request.system, str):
             messages.append({"role": "system", "content": request.system})
         else:
-            # When cache_control is present on any system TextBlock, use an
-            # array of content parts instead of collapsing to a plain string,
-            # so backends that understand cache_control can use the breakpoints.
-            if forward_cache_control and any(
-                isinstance(b, TextBlock) and b.cache_control for b in request.system
-            ):
-                parts: list[dict[str, Any]] = []
-                for block in request.system:
-                    if isinstance(block, TextBlock):
-                        part: dict[str, Any] = {"type": "text", "text": block.text}
-                        if block.cache_control:
-                            part["cache_control"] = block.cache_control
-                        parts.append(part)
-                if parts:
-                    messages.append({"role": "system", "content": parts})
-            else:
-                system_text = "\n".join(
-                    block.text for block in request.system if isinstance(block, TextBlock)
-                )
-                if system_text:
-                    messages.append({"role": "system", "content": system_text})
+            system_text = "\n".join(
+                block.text for block in request.system if isinstance(block, TextBlock)
+            )
+            if system_text:
+                messages.append({"role": "system", "content": system_text})
 
     # Convert conversation messages
     messages.extend(_convert_messages(request.messages, forward_cache_control))
