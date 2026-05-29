@@ -64,6 +64,28 @@ class MiMoBridge(Bridge):
             h["anthropic-beta"] = self._anthropic_beta
         return h
 
+    @staticmethod
+    def _normalize_usage(anthropic_usage: dict[str, Any]) -> dict[str, Any]:
+        """Convert Anthropic-format usage to the OpenAI-style keys expected by
+        _log_usage_from_context and the usage log module.
+
+        Anthropic splits input into: cache_read + cache_creation + input_tokens.
+        We map cache_read → hit, (total_input - cache_read) → miss so the
+        cache hit rate formula ``hit / (hit + miss)`` produces the correct
+        percentage.
+        """
+        input_tok: int = anthropic_usage.get("input_tokens", 0)
+        output_tok: int = anthropic_usage.get("output_tokens", 0)
+        cache_read: int = anthropic_usage.get("cache_read_input_tokens") or 0
+        return {
+            "prompt_tokens": input_tok,
+            "completion_tokens": output_tok,
+            "total_tokens": input_tok + output_tok,
+            "cached_tokens": cache_read,
+            "prompt_cache_hit_tokens": cache_read,
+            "prompt_cache_miss_tokens": max(0, input_tok - cache_read),
+        }
+
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         self.start_timer()
         body = request.model_dump(exclude_none=True)
@@ -95,7 +117,7 @@ class MiMoBridge(Bridge):
             if usage:
                 self._log_usage_from_context(
                     response_id=raw.get("id"),
-                    usage=usage,
+                    usage=self._normalize_usage(usage),
                     stop_reason=raw.get("stop_reason"),
                 )
 
@@ -147,10 +169,12 @@ class MiMoBridge(Bridge):
                     if msg_type == "message_stop":
                         self._log_usage_from_context(
                             response_id=chunk.get("id"),
-                            usage=usage_data,
+                            usage=self._normalize_usage(usage_data),
                             stop_reason=None,
                         )
-                    elif "usage" in chunk:
-                        usage_data = chunk.get("usage") or usage_data
+                    elif "usage" in chunk and chunk["usage"]:
+                        # Always overwrite — message_start has zeroed usage;
+                        # message_delta has the real data and arrives later.
+                        usage_data = chunk["usage"]
 
                 yield line + "\n"
