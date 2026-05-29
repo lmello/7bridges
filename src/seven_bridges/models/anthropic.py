@@ -56,6 +56,7 @@ class ToolResultBlock(BaseModel):
     tool_use_id: str
     content: str | list[TextBlock | ImageBlock] | None = None
     is_error: bool | None = None
+    cache_control: dict[str, str] | None = None
 
 
 ContentBlock = (
