@@ -54,6 +54,16 @@ class MiMoBridge(Bridge):
         max_tokens=32768,
     )
 
+    def _headers(self) -> dict[str, str]:
+        """Build request headers, forwarding Anthropic beta features if present."""
+        h = {
+            "api-key": self.api_key,
+            "Content-Type": "application/json",
+        }
+        if self._anthropic_beta:
+            h["anthropic-beta"] = self._anthropic_beta
+        return h
+
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         self.start_timer()
         body = request.model_dump(exclude_none=True)
@@ -62,10 +72,7 @@ class MiMoBridge(Bridge):
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.api_base}/messages",
-                headers={
-                    "api-key": self.api_key,
-                    "Content-Type": "application/json",
-                },
+                headers=self._headers(),
                 json=body,
                 timeout=300.0,
             )
@@ -100,16 +107,15 @@ class MiMoBridge(Bridge):
         body["model"] = self.backend_model
         body["stream"] = True
 
+        headers = self._headers()
+        headers["Accept"] = "text/event-stream"
+
         async with (
             httpx.AsyncClient() as client,
             client.stream(
                 "POST",
                 f"{self.api_base}/messages",
-                headers={
-                    "api-key": self.api_key,
-                    "Content-Type": "application/json",
-                    "Accept": "text/event-stream",
-                },
+                headers=headers,
                 json=body,
                 timeout=300.0,
             ) as response,

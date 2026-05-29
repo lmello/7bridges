@@ -260,6 +260,8 @@ async def messages(
 
     # Pass debug log path to bridge for outgoing request logging
     bridge._debug_log_path = getattr(request.state, "debug_log_path", None)
+    # Forward Anthropic beta features to passthrough backends (cache_control etc.)
+    bridge._anthropic_beta = request.headers.get("anthropic-beta")
 
     if anthropic_request.stream:
         stream = bridge.chat_stream(anthropic_request)

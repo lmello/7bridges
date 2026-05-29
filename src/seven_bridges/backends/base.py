@@ -59,6 +59,7 @@ class Bridge(ABC):
         self.model_alias = model_alias
         self.backend_model = backend_model
         self._debug_log_path: str | None = None
+        self._anthropic_beta: str | None = None
         self.usage_context: dict[str, Any] | None = None
         self._request_start_time: float | None = None
 
