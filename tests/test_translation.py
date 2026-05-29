@@ -816,3 +816,109 @@ def test_fireworks_ignores_siliconflow_params():
     result = anthropic_to_openai(req, "fireworks")
     assert result.enable_thinking is None
     assert result.thinking_budget is None
+
+
+# ── MiMo thinking/effort tests ──────────────────────────────────────
+
+
+def test_mimo_thinking_enabled():
+    """MiMo maps thinking enabled to thinking {type: enabled}."""
+    req = MessagesRequest(
+        model="mimo-v2.5-pro",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "enabled"},
+    )
+    result = anthropic_to_openai(req, "mimo")
+    assert result.thinking == {"type": "enabled"}
+    assert result.reasoning_effort is None
+
+
+def test_mimo_thinking_adaptive():
+    """MiMo maps thinking adaptive to thinking {type: enabled}."""
+    req = MessagesRequest(
+        model="mimo-v2.5-pro",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "adaptive"},
+    )
+    result = anthropic_to_openai(req, "mimo")
+    assert result.thinking == {"type": "enabled"}
+
+
+def test_mimo_thinking_disabled():
+    """MiMo maps thinking disabled to thinking {type: disabled}."""
+    req = MessagesRequest(
+        model="mimo-v2.5-pro",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "disabled"},
+    )
+    result = anthropic_to_openai(req, "mimo")
+    assert result.thinking == {"type": "disabled"}
+    assert result.reasoning_effort is None
+
+
+def test_mimo_thinking_with_budget():
+    """MiMo passes through budget_tokens in thinking object."""
+    req = MessagesRequest(
+        model="mimo-v2.5-pro",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "enabled", "budget_tokens": 4096},
+    )
+    result = anthropic_to_openai(req, "mimo")
+    assert result.thinking == {"type": "enabled", "budget_tokens": 4096}
+
+
+def test_mimo_effort_low_medium_high():
+    """MiMo passes through low/medium/high effort values."""
+    for effort in ("low", "medium", "high"):
+        req = MessagesRequest(
+            model="mimo-v2.5-pro",
+            messages=[Message(role="user", content="Hello")],
+            max_tokens=100,
+            output_config={"effort": effort},
+        )
+        result = anthropic_to_openai(req, "mimo")
+        assert result.reasoning_effort == effort
+        assert result.thinking is None
+
+
+def test_mimo_effort_xhigh_max_clamped_to_high():
+    """MiMo clamps xhigh and max to high (only supports low/medium/high)."""
+    for effort in ("xhigh", "max"):
+        req = MessagesRequest(
+            model="mimo-v2.5-pro",
+            messages=[Message(role="user", content="Hello")],
+            max_tokens=100,
+            output_config={"effort": effort},
+        )
+        result = anthropic_to_openai(req, "mimo")
+        assert result.reasoning_effort == "high"
+
+
+def test_mimo_no_thinking_param():
+    """MiMo with no thinking sends nothing."""
+    req = MessagesRequest(
+        model="mimo-v2.5-pro",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+    )
+    result = anthropic_to_openai(req, "mimo")
+    assert result.thinking is None
+    assert result.reasoning_effort is None
+
+
+def test_mimo_thinking_and_effort_combined():
+    """MiMo sends both thinking object and reasoning_effort when both specified."""
+    req = MessagesRequest(
+        model="mimo-v2.5-pro",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "enabled", "budget_tokens": 2048},
+        output_config={"effort": "high"},
+    )
+    result = anthropic_to_openai(req, "mimo")
+    assert result.thinking == {"type": "enabled", "budget_tokens": 2048}
+    assert result.reasoning_effort == "high"

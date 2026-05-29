@@ -367,11 +367,38 @@ def anthropic_to_openai(
                     else effort
                 )
 
-    # Build OpenAI request — Fireworks thinking takes priority over DeepSeek
-    # since they both use the "thinking" field but with different schemas.
-    final_thinking = fireworks_extra.get("thinking") or deepseek_extra.get("thinking")
-    final_reasoning_effort = fireworks_extra.get("reasoning_effort") or deepseek_extra.get(
-        "reasoning_effort"
+    # MiMo thinking/effort passthrough.
+    # MiMo supports thinking {type: enabled/disabled} with optional budget_tokens,
+    # and reasoning_effort (low/medium/high only — rejects xhigh/max).
+    mimo_extra: dict[str, Any] = {}
+    if backend_name == "mimo":
+        if request.thinking:
+            thinking_type = request.thinking.get("type")
+            if thinking_type in ("enabled", "adaptive"):
+                mimo_thinking: dict[str, Any] = {"type": "enabled"}
+                budget = request.thinking.get("budget_tokens")
+                if budget:
+                    mimo_thinking["budget_tokens"] = budget
+                mimo_extra["thinking"] = mimo_thinking
+            elif thinking_type == "disabled":
+                mimo_extra["thinking"] = {"type": "disabled"}
+        if request.output_config:
+            effort = request.output_config.get("effort")
+            if effort:
+                # MiMo only supports low/medium/high — clamp xhigh/max to high
+                clamped = effort if effort in ("low", "medium", "high") else "high"
+                mimo_extra["reasoning_effort"] = clamped
+
+    # Build OpenAI request — only one backend matches; extras are mutually exclusive.
+    final_thinking = (
+        fireworks_extra.get("thinking")
+        or deepseek_extra.get("thinking")
+        or mimo_extra.get("thinking")
+    )
+    final_reasoning_effort = (
+        fireworks_extra.get("reasoning_effort")
+        or deepseek_extra.get("reasoning_effort")
+        or mimo_extra.get("reasoning_effort")
     )
 
     return ChatCompletionRequest(
