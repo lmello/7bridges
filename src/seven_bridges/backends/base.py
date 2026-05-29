@@ -44,6 +44,7 @@ class Bridge(ABC):
 
     name: str = ""
     default_api_base: str = ""
+    is_passthrough: bool = False  # True if the bridge proxies Anthropic natively (no translation)
     capabilities: VendorCapabilities = VendorCapabilities()
 
     def __init__(
@@ -185,6 +186,11 @@ class Bridge(ABC):
         ...
 
     @abstractmethod
-    def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
-        """Send a streaming chat request and yield Anthropic-format SSE events."""
+    def chat_stream(self, request: MessagesRequest) -> AsyncIterator[str | dict[str, Any]]:
+        """Send a streaming chat request and yield Anthropic-format SSE events.
+
+        OpenAI-translating bridges yield ``{"type": "raw", "data": ...}`` dicts
+        for the stream translator.  Passthrough bridges yield full SSE text
+        lines (``"event: ...\\ndata: {...}\\n\\n"``).
+        """
         ...

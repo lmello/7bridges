@@ -1,4 +1,13 @@
-"""Xiaomi MiMo bridge — translates Anthropic Messages API to MiMo's OpenAI API."""
+"""Xiaomi MiMo bridge — dual-mode backend.
+
+- Anthropic passthrough (default): proxies directly to MiMo's native
+  /anthropic/v1/messages endpoint.  Cache_control breakpoints work natively,
+  reasoning is returned as thinking blocks, and streaming preserves all
+  Anthropic SSE events.  No OpenAI translation overhead.
+
+- OpenAI-compatible (legacy): translates via the standard OpenAI path for
+  the /v1/chat/completions endpoint.  Prompt caching uses prompt_cache_key.
+"""
 
 import json
 from collections.abc import AsyncIterator
@@ -8,12 +17,9 @@ import httpx
 
 from seven_bridges.backends.base import Bridge, BridgeError, VendorCapabilities
 from seven_bridges.models.anthropic import MessagesRequest, MessagesResponse
-from seven_bridges.translation.request import anthropic_to_openai
-from seven_bridges.translation.response import openai_to_anthropic
 
 
 def _map_http_error(status_code: int) -> str:
-    """Map HTTP status code to Anthropic-style error type."""
     mapping = {
         400: "invalid_request_error",
         401: "authentication_error",
@@ -30,10 +36,16 @@ def _map_http_error(status_code: int) -> str:
 
 
 class MiMoBridge(Bridge):
-    """Bridge to Xiaomi MiMo's OpenAI-compatible API."""
+    """Anthropic-native passthrough to MiMo's /anthropic/v1/messages.
+
+    Requests and responses are passed through with no OpenAI translation.
+    Claude Code's cache_control breakpoints go directly to MiMo, so prompt
+    caching works out of the box.
+    """
 
     name = "mimo"
-    default_api_base = "https://token-plan-sgp.xiaomimimo.com/v1"
+    default_api_base = "https://token-plan-sgp.xiaomimimo.com/anthropic/v1"
+    is_passthrough = True
     capabilities = VendorCapabilities(
         supports_vision=True,
         supports_reasoning=True,
@@ -43,22 +55,18 @@ class MiMoBridge(Bridge):
     )
 
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
-        """Send a non-streaming request to MiMo."""
         self.start_timer()
-        openai_request = anthropic_to_openai(request, self.name)
-        openai_request.model = self.backend_model
-        openai_request.prompt_cache_key = (
-            self.usage_context.get("session_id") if self.usage_context else None
-        )
+        body = request.model_dump(exclude_none=True)
+        body["model"] = self.backend_model
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.api_base}/chat/completions",
+                f"{self.api_base}/messages",
                 headers={
                     "api-key": self.api_key,
                     "Content-Type": "application/json",
                 },
-                json=openai_request.model_dump(exclude_none=True),
+                json=body,
                 timeout=300.0,
             )
 
@@ -81,86 +89,62 @@ class MiMoBridge(Bridge):
                 self._log_usage_from_context(
                     response_id=raw.get("id"),
                     usage=usage,
-                    stop_reason=_map_stop_reason(raw.get("choices", [{}])[0].get("finish_reason")),
+                    stop_reason=raw.get("stop_reason"),
                 )
 
-            return openai_to_anthropic(raw, self.model_alias)
+            return MessagesResponse.model_validate(raw)
 
-    async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
-        """Send a streaming request to MiMo and yield Anthropic-format events."""
+    async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[str]:
         self.start_timer()
-        openai_request = anthropic_to_openai(request, self.name)
-        openai_request.model = self.backend_model
-        openai_request.prompt_cache_key = (
-            self.usage_context.get("session_id") if self.usage_context else None
-        )
-        openai_request.stream = True
-        from seven_bridges.models.openai import StreamOptions
-
-        openai_request.stream_options = StreamOptions(include_usage=True)
-
-        if self._debug_log_path:
-            outgoing = openai_request.model_dump(exclude_none=True)
-            self._log_outgoing(outgoing)
+        body = request.model_dump(exclude_none=True)
+        body["model"] = self.backend_model
+        body["stream"] = True
 
         async with (
             httpx.AsyncClient() as client,
             client.stream(
                 "POST",
-                f"{self.api_base}/chat/completions",
+                f"{self.api_base}/messages",
                 headers={
                     "api-key": self.api_key,
                     "Content-Type": "application/json",
                     "Accept": "text/event-stream",
                 },
-                json=openai_request.model_dump(exclude_none=True),
+                json=body,
                 timeout=300.0,
             ) as response,
         ):
             if response.status_code != 200:
-                body = await response.aread()
+                error_body = await response.aread()
                 error_type = _map_http_error(response.status_code)
                 self._log_error_from_context(
                     status_code=response.status_code,
                     error_type=error_type,
-                    message=body.decode(),
+                    message=error_body.decode(),
                 )
                 raise BridgeError(
-                    message=body.decode(),
+                    message=error_body.decode(),
                     status_code=response.status_code,
                     error_type=error_type,
                 )
 
+            usage_data: dict[str, Any] = {}
             async for line in response.aiter_lines():
                 if line.startswith("data:"):
-                    data = line[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    # Detect usage-only chunks (from include_usage=True)
+                    data_str = line[5:].strip()
                     try:
-                        chunk = json.loads(data)
-                        choices = chunk.get("choices", [])
-                        usage = chunk.get("usage")
-                        if not choices and usage:
-                            self._log_usage_from_context(
-                                response_id=chunk.get("id"),
-                                usage=usage,
-                                stop_reason=None,
-                            )
+                        chunk = json.loads(data_str)
                     except json.JSONDecodeError:
-                        import logging
+                        continue
 
-                        logger = logging.getLogger(__name__)
-                        logger.warning("Failed to parse stream chunk: %r", data)
-                    yield {"type": "raw", "data": data}
+                    msg_type = chunk.get("type", "")
+                    if msg_type == "message_stop":
+                        self._log_usage_from_context(
+                            response_id=chunk.get("id"),
+                            usage=usage_data,
+                            stop_reason=None,
+                        )
+                    elif "usage" in chunk:
+                        usage_data = chunk.get("usage") or usage_data
 
-
-def _map_stop_reason(finish_reason: str | None) -> str | None:
-    """Map OpenAI finish_reason to Anthropic stop_reason for usage logging."""
-    mapping = {
-        "stop": "end_turn",
-        "length": "max_tokens",
-        "tool_calls": "tool_use",
-        "content_filter": "max_tokens",
-    }
-    return mapping.get(finish_reason or "")
+                yield line + "\n"

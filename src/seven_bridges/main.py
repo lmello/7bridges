@@ -263,8 +263,29 @@ async def messages(
 
     if anthropic_request.stream:
         stream = bridge.chat_stream(anthropic_request)
-        translated = translate_openai_stream(stream, route.alias)
+        if getattr(bridge, "is_passthrough", False):
+            # Passthrough bridges yield full Anthropic SSE text lines
+            async def _passthrough() -> AsyncIterator[str]:
+                async for item in stream:
+                    if isinstance(item, str):
+                        yield item
 
+            return StreamingResponse(
+                _passthrough(),
+                media_type="text/event-stream",
+                headers={
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                },
+            )
+
+        # OpenAI bridges yield dicts for translation
+        async def _collect_dicts() -> AsyncIterator[dict[str, Any]]:
+            async for item in stream:
+                if isinstance(item, dict):
+                    yield item
+
+        translated = translate_openai_stream(_collect_dicts(), route.alias)
         return StreamingResponse(
             translated,
             media_type="text/event-stream",

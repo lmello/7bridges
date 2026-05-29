@@ -25,6 +25,7 @@ _SIGNATURE_PLACEHOLDER: str = ""
 class TextBlock(BaseModel):
     type: Literal["text"] = "text"
     text: str
+    cache_control: dict[str, str] | None = None
 
 
 class ThinkingBlock(BaseModel):

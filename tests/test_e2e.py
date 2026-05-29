@@ -2173,31 +2173,25 @@ def test_fireworks_minimax_non_streaming():
 
 
 # ---------------------------------------------------------------------------
-# MiMo e2e tests
+# MiMo e2e tests (Anthropic-native passthrough)
 # ---------------------------------------------------------------------------
 
 
 @respx.mock
 def test_mimo_non_streaming_text():
-    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+    respx.post("https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages").mock(
         return_value=Response(
             200,
             json={
-                "id": "chatcmpl-mimo-1",
-                "object": "chat.completion",
-                "created": 1234567890,
+                "id": "msg_mimo_1",
+                "type": "message",
+                "role": "assistant",
                 "model": "mimo-v2.5-pro",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "Hello from MiMo!"},
-                        "finish_reason": "stop",
-                    }
-                ],
+                "content": [{"type": "text", "text": "Hello from MiMo!"}],
+                "stop_reason": "end_turn",
                 "usage": {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 5,
-                    "total_tokens": 15,
+                    "input_tokens": 10,
+                    "output_tokens": 5,
                 },
             },
         )
@@ -2229,31 +2223,72 @@ def test_mimo_non_streaming_text():
     upstream = json.loads(respx.routes[0].calls[0].request.content)
     assert upstream["model"] == "mimo-v2.5-pro"
     assert upstream["messages"][0]["role"] == "user"
-    # Verify MiMo uses api-key header
     assert respx.routes[0].calls[0].request.headers["api-key"] == "test-mimo-key"
+
+
+def _make_sse(event_type, data):
+    """Format an SSE event string."""
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
 
 @respx.mock
 def test_mimo_streaming_text():
-    chunks = [
-        json.dumps(
+    sse_body = (
+        _make_sse(
+            "message_start",
             {
-                "id": "chatcmpl-mimo-2",
-                "choices": [{"delta": {"content": "Hello"}, "finish_reason": None}],
-            }
-        ),
-        json.dumps(
+                "type": "message_start",
+                "message": {
+                    "id": "msg_mimo_2",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "mimo-v2.5-pro",
+                    "content": [],
+                    "stop_reason": None,
+                    "usage": {"input_tokens": 0, "output_tokens": 0},
+                },
+            },
+        )
+        + _make_sse(
+            "content_block_start",
             {
-                "id": "chatcmpl-mimo-2",
-                "choices": [{"delta": {"content": " world"}, "finish_reason": "stop"}],
-            }
-        ),
-    ]
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+        )
+        + _make_sse(
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Hello"},
+            },
+        )
+        + _make_sse(
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": " world"},
+            },
+        )
+        + _make_sse("content_block_stop", {"type": "content_block_stop", "index": 0})
+        + _make_sse(
+            "message_delta",
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                "usage": {"input_tokens": 10, "output_tokens": 5},
+            },
+        )
+        + _make_sse("message_stop", {"type": "message_stop"})
+    )
 
-    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+    respx.post("https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages").mock(
         return_value=Response(
             200,
-            text="".join(f"data:{c}\n\n" for c in chunks) + "data:[DONE]\n\n",
+            text=sse_body,
             headers={"Content-Type": "text/event-stream"},
         )
     )
@@ -2283,7 +2318,6 @@ def test_mimo_streaming_text():
     ]
     assert "".join(d[1]["delta"]["text"] for d in text_deltas) == "Hello world"
 
-    # Verify the upstream request is correct
     upstream = json.loads(respx.routes[0].calls[0].request.content)
     assert upstream["model"] == "mimo-v2.5-pro"
     assert upstream["stream"] is True
@@ -2292,30 +2326,23 @@ def test_mimo_streaming_text():
 
 @respx.mock
 def test_mimo_with_reasoning():
-    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+    """Anthropic passthrough: thinking blocks pass through natively."""
+    respx.post("https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages").mock(
         return_value=Response(
             200,
             json={
-                "id": "chatcmpl-mimo-3",
-                "object": "chat.completion",
-                "created": 1234567890,
+                "id": "msg_mimo_3",
+                "type": "message",
+                "role": "assistant",
                 "model": "mimo-v2.5-pro",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": "Hello!",
-                            "reasoning_content": "The user is greeting me.",
-                        },
-                        "finish_reason": "stop",
-                    }
+                "content": [
+                    {"type": "thinking", "thinking": "The user is greeting me.", "signature": ""},
+                    {"type": "text", "text": "Hello!"},
                 ],
+                "stop_reason": "end_turn",
                 "usage": {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 8,
-                    "total_tokens": 18,
-                    "completion_tokens_details": {"reasoning_tokens": 5},
+                    "input_tokens": 10,
+                    "output_tokens": 8,
                 },
             },
         )
@@ -2335,7 +2362,6 @@ def test_mimo_with_reasoning():
     assert resp.status_code == 200
     data = resp.json()
     assert data["model"] == "mimo-v2.5-pro"
-    # reasoning_content → thinking block first, then text
     assert len(data["content"]) == 2
     assert data["content"][0]["type"] == "thinking"
     assert data["content"][0]["thinking"] == "The user is greeting me."
@@ -2345,39 +2371,88 @@ def test_mimo_with_reasoning():
 
 @respx.mock
 def test_mimo_streaming_with_reasoning():
-    chunks = [
-        json.dumps(
+    """Anthropic passthrough streaming preserves thinking deltas."""
+    sse_body = (
+        _make_sse(
+            "message_start",
             {
-                "id": "chatcmpl-mimo-4",
-                "choices": [{"delta": {"reasoning_content": "The user"}, "finish_reason": None}],
-            }
-        ),
-        json.dumps(
+                "type": "message_start",
+                "message": {
+                    "id": "msg_mimo_4",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "mimo-v2.5-pro",
+                    "content": [],
+                    "stop_reason": None,
+                    "usage": {"input_tokens": 0, "output_tokens": 0},
+                },
+            },
+        )
+        + _make_sse(
+            "content_block_start",
             {
-                "id": "chatcmpl-mimo-4",
-                "choices": [
-                    {"delta": {"reasoning_content": " wants a greeting."}, "finish_reason": None}
-                ],
-            }
-        ),
-        json.dumps(
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": "", "signature": ""},
+            },
+        )
+        + _make_sse(
+            "content_block_delta",
             {
-                "id": "chatcmpl-mimo-4",
-                "choices": [{"delta": {"content": "Hello"}, "finish_reason": None}],
-            }
-        ),
-        json.dumps(
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "The user"},
+            },
+        )
+        + _make_sse(
+            "content_block_delta",
             {
-                "id": "chatcmpl-mimo-4",
-                "choices": [{"delta": {"content": " there!"}, "finish_reason": "stop"}],
-            }
-        ),
-    ]
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": " wants a greeting."},
+            },
+        )
+        + _make_sse("content_block_stop", {"type": "content_block_stop", "index": 0})
+        + _make_sse(
+            "content_block_start",
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {"type": "text", "text": ""},
+            },
+        )
+        + _make_sse(
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": "Hello"},
+            },
+        )
+        + _make_sse(
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": " there!"},
+            },
+        )
+        + _make_sse("content_block_stop", {"type": "content_block_stop", "index": 1})
+        + _make_sse(
+            "message_delta",
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                "usage": {"input_tokens": 10, "output_tokens": 8},
+            },
+        )
+        + _make_sse("message_stop", {"type": "message_stop"})
+    )
 
-    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+    respx.post("https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages").mock(
         return_value=Response(
             200,
-            text="".join(f"data:{c}\n\n" for c in chunks) + "data:[DONE]\n\n",
+            text=sse_body,
             headers={"Content-Type": "text/event-stream"},
         )
     )
@@ -2414,28 +2489,23 @@ def test_mimo_streaming_with_reasoning():
 
 
 @respx.mock
-def test_mimo_with_prompt_cache_key():
-    """Verify prompt_cache_key is forwarded to MiMo upstream."""
-    route = respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+def test_mimo_with_cache_control():
+    """Anthropic passthrough preserves cache_control breakpoints in the request."""
+    route = respx.post("https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages").mock(
         return_value=Response(
             200,
             json={
-                "id": "chatcmpl-mimo-5",
-                "object": "chat.completion",
-                "created": 1234567890,
+                "id": "msg_mimo_5",
+                "type": "message",
+                "role": "assistant",
                 "model": "mimo-v2.5-pro",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "Cached response"},
-                        "finish_reason": "stop",
-                    }
-                ],
+                "content": [{"type": "text", "text": "Cached response"}],
+                "stop_reason": "end_turn",
                 "usage": {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 5,
-                    "total_tokens": 15,
-                    "prompt_tokens_details": {"cached_tokens": 8},
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_read_input_tokens": 8,
+                    "cache_creation_input_tokens": 0,
                 },
             },
         )
@@ -2446,10 +2516,16 @@ def test_mimo_with_prompt_cache_key():
         headers={
             "x-api-key": API_KEY,
             "Content-Type": "application/json",
-            "x-claude-code-session-id": "session-abc-123",
         },
         json={
             "model": "mimo-v2.5-pro",
+            "system": [
+                {
+                    "type": "text",
+                    "text": "Cached system prompt.",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             "messages": [{"role": "user", "content": "Hi"}],
             "max_tokens": 100,
             "stream": False,
@@ -2461,31 +2537,27 @@ def test_mimo_with_prompt_cache_key():
     assert data["usage"]["cache_read_input_tokens"] == 8
 
     upstream = json.loads(route.calls[0].request.content)
-    assert upstream["prompt_cache_key"] == "session-abc-123"
+    assert upstream["system"][0]["cache_control"]["type"] == "ephemeral", (
+        "cache_control breakpoint preserved in passthrough"
+    )
 
 
 @respx.mock
 def test_mimo_v2_5_base_model():
-    """Verify the base mimo-v2.5 model routes correctly."""
-    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+    """Verify the base mimo-v2.5 model routes correctly with Anthropic passthrough."""
+    respx.post("https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages").mock(
         return_value=Response(
             200,
             json={
-                "id": "chatcmpl-mimo-6",
-                "object": "chat.completion",
-                "created": 1234567890,
+                "id": "msg_mimo_6",
+                "type": "message",
+                "role": "assistant",
                 "model": "mimo-v2.5",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "Hello from MiMo v2.5!"},
-                        "finish_reason": "stop",
-                    }
-                ],
+                "content": [{"type": "text", "text": "Hello from MiMo v2.5!"}],
+                "stop_reason": "end_turn",
                 "usage": {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 5,
-                    "total_tokens": 15,
+                    "input_tokens": 10,
+                    "output_tokens": 5,
                 },
             },
         )
@@ -2513,7 +2585,7 @@ def test_mimo_v2_5_base_model():
 
 @respx.mock
 def test_mimo_upstream_error_mapping():
-    respx.post("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions").mock(
+    respx.post("https://token-plan-sgp.xiaomimimo.com/anthropic/v1/messages").mock(
         return_value=Response(429, text="Too many requests"),
     )
 
