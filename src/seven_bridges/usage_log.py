@@ -62,10 +62,12 @@ def _compute_cost(
     pricing = get_pricing(backend, model_alias)
     input_tokens: int = usage.get("prompt_tokens", 0)
     output_tokens: int = usage.get("completion_tokens", 0)
+    details = usage.get("prompt_tokens_details")
     cache_read_tokens: int = (
         usage.get("prompt_cache_hit_tokens")
         or usage.get("cached-prompt-tokens")
         or usage.get("cached_tokens")
+        or (details.get("cached_tokens") if isinstance(details, dict) else None)
         or 0
     )
     cost = (
@@ -83,6 +85,14 @@ def _compute_cache_hit_rate(usage: dict[str, Any]) -> float | None:
 
     if isinstance(hit, int) and isinstance(miss, int) and (hit + miss) > 0:
         return round(hit / (hit + miss) * 100, 1)
+
+    # MiMo / providers that nest cache inside prompt_tokens_details
+    details = usage.get("prompt_tokens_details")
+    if isinstance(details, dict):
+        cached = details.get("cached_tokens")
+        total = usage.get("prompt_tokens", 0)
+        if isinstance(cached, int) and isinstance(total, int) and cached > 0 and total > 0:
+            return float(round(cached / total * 100, 1))
 
     return None
 
@@ -146,7 +156,14 @@ def _log_usage(
                 "prompt_tokens": usage.get("prompt_tokens", 0),
                 "completion_tokens": usage.get("completion_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0),
-                "cached_tokens": usage.get("cached_tokens"),
+                "cached_tokens": (
+                    usage.get("cached_tokens")
+                    or (
+                        (isinstance(d, dict) and d.get("cached_tokens"))
+                        if (d := usage.get("prompt_tokens_details"))
+                        else None
+                    )
+                ),
                 "prompt_cache_hit_tokens": usage.get("prompt_cache_hit_tokens"),
                 "prompt_cache_miss_tokens": usage.get("prompt_cache_miss_tokens"),
             },

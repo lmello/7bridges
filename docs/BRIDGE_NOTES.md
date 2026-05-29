@@ -65,7 +65,11 @@ See [OLLAMA_MODELS.md](OLLAMA_MODELS.md) for full capabilities, architecture det
 
 ## Xiaomi MiMo (`mimo-v2.5-pro`, `mimo-v2.5`)
 
-- **Thinking / reasoning:** MiMo returns `reasoning_content` natively in both streaming and non-streaming responses. The bridge maps this to Anthropic `thinking` blocks. Reasoning is always active — there is no `thinking` toggle parameter; the model decides internally when to reason.
+- **Thinking / reasoning:** MiMo returns `reasoning_content` natively in both streaming and non-streaming responses. The bridge maps this to Anthropic `thinking` blocks. You can control reasoning through:
+  - `thinking.type`: `"enabled"` / `"adaptive"` → reasoning on; `"disabled"` → reasoning off. Both map to MiMo's `thinking` object.
+  - `thinking.budget_tokens`: passed through to MiMo's `thinking.budget_tokens` for token-level control.
+  - `output_config.effort`: maps to MiMo's `reasoning_effort`. MiMo only supports `low` / `medium` / `high` — `xhigh` and `max` are silently clamped to `high` to avoid upstream rejection.
+  - If neither `thinking` nor `output_config` is specified, MiMo defaults to reasoning on (it always reasons unless explicitly disabled).
 - **Prompt caching:** Enabled via `prompt_cache_key` forwarded from `x-claude-code-session-id`. Cache hits appear in `usage.cache_read_input_tokens`. The cache threshold is approximately 1000+ tokens — prefixes smaller than this will not trigger caching. Cache tokens are reported inside `prompt_tokens_details.cached_tokens` in the upstream response, which the bridge extracts and maps to Anthropic's `cache_read_input_tokens`.
 - **Vision:** Full multimodal support — native image input via `image_url` blocks.
 - **Tools:** Full tool use support.
