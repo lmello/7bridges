@@ -19,6 +19,7 @@ If you just want the short version, see the [Quick Start](../README.md#quick-sta
   - [SiliconFlow](#siliconflow)
   - [Fireworks AI](#fireworks-ai)
   - [Ollama (Local)](#ollama-local)
+  - [Xiaomi MiMo](#xiaomi-mimo)
 - [Understanding Environment Variables](#understanding-environment-variables)
 - [Switching Between Backends](#switching-between-backends)
 - [Debug Logging](#debug-logging)
@@ -51,6 +52,8 @@ You need:
 | Kimi | Free (trial credits) | ~$1–3/million tokens |
 | SiliconFlow | Free tier available | ~$0.30–1/million tokens |
 | Fireworks AI | Free (trial credits) | ~$0.50–2/million tokens |
+| Fireworks AI | Free (trial credits) | ~$0.50–2/million tokens |
+| Xiaomi MiMo | Token plan | ~$0.14–4/million tokens (depending on model) |
 | Ollama | Free | Free (uses your electricity) |
 
 ---
@@ -334,6 +337,43 @@ export BRIDGE_API_KEY="ollama"
 
 ---
 
+### Xiaomi MiMo
+
+Xiaomi MiMo offers MiMo-V2.5 models through a token plan with prompt caching support. The API is OpenAI-compatible with `api-key` header auth.
+
+**1. Sign up:**
+
+Go to [platform.xiaomimimo.com](https://platform.xiaomimimo.com) and create an account.
+
+**2. Get your API key:**
+
+- Log in to the console
+- Go to "Subscription Details"
+- Create a new Token Plan API key
+- Copy the key (starts with `tp-`)
+
+**3. Configure:**
+
+```bash
+export MIMO_API_KEY="tp-your-key-here"
+export BRIDGE_API_KEY="ollama"
+```
+
+**4. Use in Claude Code:**
+
+```
+/model mimo-v2.5-pro    # MiMo V2.5 Pro (flagship)
+/model mimo-v2.5         # MiMo V2.5 (faster, cheaper)
+```
+
+**Notes:**
+- MiMo supports **vision** (native image input), reasoning, and tools.
+- Prompt caching is enabled automatically via `prompt_cache_key`. Cache hits are reflected in usage stats.
+- Auth uses the `api-key` header (not Bearer token).
+- The context window is 1,000,000 tokens.
+
+---
+
 ### Ollama (Local)
 
 Ollama lets you run open-weight models entirely on your own hardware. No API keys, no usage costs, works offline.
@@ -420,6 +460,7 @@ Here's what each variable does and whether you need it:
 | `KIMI_CODE_API_KEY` | Only for Kimi | Your Kimi Code API key. |
 | `SILICONFLOW_API_KEY` | Only for SiliconFlow | Your SiliconFlow API key. |
 | `FIREWORKSAI_API_KEY` | Only for Fireworks | Your Fireworks AI API key. |
+| `MIMO_API_KEY` | Only for MiMo | Your Xiaomi MiMo token plan API key (starts with `tp-`). |
 | `OLLAMA_HOST` | Only for Ollama | URL of your Ollama server. Default: `http://127.0.0.1:11434` |
 | `OLLAMA_SONNET_MODEL` | Only for Ollama | Model name for the `ollama-sonnet` alias. |
 | `OLLAMA_HAIKU_MODEL` | Only for Ollama | Model name for the `ollama-haiku` alias. |

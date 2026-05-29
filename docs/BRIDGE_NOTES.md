@@ -60,3 +60,15 @@ Detailed behavior notes for each backend bridge. For setup instructions, see [GE
 - **`ollama-gpt-oss`** has a ~50% failure rate on first-time `Write` tool calls — the model sometimes emits the tool call with incomplete parameters. Subsequent retries almost always succeed.
 
 See [OLLAMA_MODELS.md](OLLAMA_MODELS.md) for full capabilities, architecture details, and per-model notes.
+
+---
+
+## Xiaomi MiMo (`mimo-v2.5-pro`, `mimo-v2.5`)
+
+- **Thinking / reasoning:** MiMo returns `reasoning_content` natively in both streaming and non-streaming responses. The bridge maps this to Anthropic `thinking` blocks. Reasoning is always active — there is no `thinking` toggle parameter; the model decides internally when to reason.
+- **Prompt caching:** Enabled via `prompt_cache_key` forwarded from `x-claude-code-session-id`. Cache hits appear in `usage.cache_read_input_tokens`. The cache threshold is approximately 1000+ tokens — prefixes smaller than this will not trigger caching. Cache tokens are reported inside `prompt_tokens_details.cached_tokens` in the upstream response, which the bridge extracts and maps to Anthropic's `cache_read_input_tokens`.
+- **Vision:** Full multimodal support — native image input via `image_url` blocks.
+- **Tools:** Full tool use support.
+- **Context window:** 1,000,000 tokens.
+- **Auth:** Uses the `api-key` header (not `Authorization: Bearer`). Token plan API keys are created in the MiMo console under Subscription Details and use the `tp-` prefix. The bridge points to the token plan endpoint (`token-plan-sgp.xiaomimimo.com/v1`).
+- **Streaming:** MiMo sends `reasoning_content` deltas interleaved with `content` deltas. The bridge's streaming translator handles this by opening a thinking block first, then transitioning to a text block when content arrives.

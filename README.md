@@ -8,7 +8,7 @@ An [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) proxy th
 
 # What's new?
 
-- Added support for SiliconFlow (MiniMax M2.5, Kimi K2.6, GLM 5.1), Fireworks AI (Kimi K2.6, MiniMax M2.7), and Ollama. Some working examples are further down.
+- Added support for SiliconFlow (MiniMax M2.5, Kimi K2.6, GLM 5.1), Fireworks AI (Kimi K2.6, MiniMax M2.7), Xiaomi MiMo (MiMo V2.5 Pro, MiMo V2.5), and Ollama. Some working examples are further down.
 
 <br>
 
@@ -98,6 +98,7 @@ Each backend is a "bridge":
 | SiliconFlow | `api.siliconflow.com/v1` | Kimi K2.6 | ✅ | ✅ | ✅ | Live |
 | Fireworks AI | `api.fireworks.ai/inference/v1` | Kimi K2.6 | ✅ | ✅ | ✅ | Live |
 | Fireworks AI | `api.fireworks.ai/inference/v1` | MiniMax M2.7 | ❌ | ✅ | ✅ | Live |
+| Xiaomi MiMo | `token-plan-sgp.xiaomimimo.com/v1` | `mimo-v2.5-pro` (Pro), `mimo-v2.5` (Flash) | ✅ | ✅ | ✅ | Live |
 
 > **Note on vision/image support:** DeepSeek v4 does not natively support image input. By default, image requests to DeepSeek receive a **soft 200 rejection** with guidance to use OCR/DOM fallbacks instead of a fatal 400 error. For full vision support, you can either use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) which maps to Kimi K2.6, or enable the experimental **vision fallback** feature that routes images to a separate VL backend (Kimi or Ollama) and feeds the text description back to the blind model. See [docs/VISION_FALLBACK.md](docs/VISION_FALLBACK.md).
 
@@ -118,6 +119,8 @@ Each backend is a "bridge":
 | `siliconflow-glm-5.1` | SiliconFlow | `zai-org/GLM-5.1` | 200,000 | 131,072 |
 | `fireworks-kimi-k2p6` | Fireworks AI | `accounts/fireworks/models/kimi-k2p6` | 262,144 | 262,144 |
 | `fireworks-minimax-m2p7` | Fireworks AI | `accounts/fireworks/models/minimax-m2p7` | 204,800 | 131,072 |
+| `mimo-v2.5-pro` | Xiaomi MiMo | `mimo-v2.5-pro` | 1,000,000 | 131,072 |
+| `mimo-v2.5` | Xiaomi MiMo | `mimo-v2.5` | 1,000,000 | 131,072 |
 
 ### Per-Bridge Notes
 
@@ -137,6 +140,14 @@ Each backend is a "bridge":
 **Fireworks AI (`fireworks-kimi-k2p6`, `fireworks-minimax-m2p7`)**
 
 - **Thinking / reasoning:** Kimi K2.6 via Fireworks accepts the Anthropic-compatible `thinking` object with `type` and `budget_tokens`. MiniMax M2.7 only accepts `reasoning_effort` string (`low`/`medium`/`high`); the bridge converts accordingly.
+
+**Xiaomi MiMo (`mimo-v2.5-pro`, `mimo-v2.5`)**
+
+- **Thinking / reasoning:** MiMo returns `reasoning_content` natively, which the bridge maps to Anthropic `thinking` blocks. Reasoning is always active — there is no `thinking` toggle; the model decides when to reason.
+- **Prompt caching:** Enabled via `prompt_cache_key` forwarded from `x-claude-code-session-id`. Cache hits are reflected in `cache_read_input_tokens`. Cache threshold is ~1000+ tokens — smaller prefixes won't trigger caching.
+- **Vision:** Full multimodal support (native image input).
+- **Context window:** 1,000,000 tokens.
+- **Auth:** Uses the `api-key` header (not `Authorization: Bearer`). Token plan keys are created in the MiMo console under Subscription Details.
 
 > **Full details:** See [`docs/BRIDGE_NOTES.md`](docs/BRIDGE_NOTES.md) for vision support, known quirks, and free tier notes.
 
@@ -262,6 +273,8 @@ curl -X POST http://localhost:4001/v1/messages \
 | Good balance | `claude-sonnet-4-6` | DeepSeek v4-pro | Paid | Strong reasoning, 1M context, cheaper than Kimi. |
 | Completely free | `ollama-sonnet` | Local Qwen 3.6 | Free | Runs on your computer. Needs ~32GB RAM. |
 | Free, lighter | `ollama-haiku` | Local Qwen 3.5 | Free | Runs on your computer. Needs ~16GB RAM. |
+| Vision + thinking | `mimo-v2.5-pro` | Xiaomi MiMo V2.5 Pro | Token plan | 1M context, prompt caching. |
+| Budget vision | `mimo-v2.5` | Xiaomi MiMo V2.5 Flash | Token plan | 1M context, lighter/faster. |
 
 **Full model alias reference:** See the [Model Aliases](#model-aliases) table above.
 
@@ -416,7 +429,7 @@ Runs the full test suite with an 80% coverage gate. See [`CLAUDE.md`](CLAUDE.md)
 ## Tests
 
 - **Unit**: Request/response field mapping, content block conversion, streaming event generation
-- **E2E**: Full HTTP round-trips with mocked DeepSeek, Kimi, SiliconFlow, Fireworks AI, and Ollama APIs using `respx`
+- **E2E**: Full HTTP round-trips with mocked DeepSeek, Kimi, SiliconFlow, Fireworks AI, MiMo, and Ollama APIs using `respx`
 - **Smoke**: Health, auth, model listing, validation errors
 - **Debug**: Middleware request/response capture
 - **Vision fallback**: Image description extraction and VL round-trips
@@ -448,7 +461,8 @@ For a deep dive into the translation pipeline, content block mapping, streaming 
 │   │   ├── kimi.py          # Kimi bridge
 │   │   ├── fireworks.py     # Fireworks AI bridge
 │   │   ├── ollama.py        # Ollama bridge
-│   │   └── siliconflow.py   # SiliconFlow bridge
+│   │   ├── siliconflow.py   # SiliconFlow bridge
+│   │   └── mimo.py           # Xiaomi MiMo bridge
 │   └── translation/
 │       ├── request.py       # Anthropic → OpenAI request translation
 │       ├── response.py      # OpenAI → Anthropic response translation

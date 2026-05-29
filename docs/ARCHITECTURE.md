@@ -185,6 +185,7 @@ src/seven_bridges/
 │   ├── kimi.py          # Kimi bridge (api.kimi.com/coding/v1)
 │   ├── fireworks.py     # Fireworks AI bridge
 │   ├── siliconflow.py   # SiliconFlow bridge
+│   ├── mimo.py           # Xiaomi MiMo bridge
 │   └── ollama.py        # Ollama local bridge
 └── translation/
     ├── request.py       # anthropic_to_openai()

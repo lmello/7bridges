@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## v1.15.0 (2026-05-29)
+
+### Features
+
+- **mimo**: Add Xiaomi MiMo OpenAI-compatible backend with prompt caching
+  ([`f0eaa78`](https://github.com/sdkks/7bridges/commit/f0eaa78))
+
 ## v1.14.0 (2026-05-28)
 
 ### Documentation
