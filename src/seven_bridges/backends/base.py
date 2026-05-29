@@ -45,6 +45,7 @@ class Bridge(ABC):
     name: str = ""
     default_api_base: str = ""
     is_passthrough: bool = False  # True if the bridge proxies Anthropic natively (no translation)
+    forward_cache_control: bool = True  # Preserve cache_control breakpoints in OpenAI translation
     capabilities: VendorCapabilities = VendorCapabilities()
 
     def __init__(

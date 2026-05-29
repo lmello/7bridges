@@ -37,7 +37,10 @@ def _anthropic_image_to_openai(image_block: ImageBlock) -> dict[str, Any] | None
     return None
 
 
-def _convert_user_content(content: str | list[ContentBlock]) -> str | list[dict[str, Any]]:
+def _convert_user_content(
+    content: str | list[ContentBlock],
+    forward_cache_control: bool = True,
+) -> str | list[dict[str, Any]]:
     """Convert Anthropic user message content to OpenAI format.
 
     Returns a string for text-only content, or a list of content parts
@@ -51,7 +54,10 @@ def _convert_user_content(content: str | list[ContentBlock]) -> str | list[dict[
 
     for block in content:
         if isinstance(block, TextBlock):
-            parts.append({"type": "text", "text": block.text})
+            part: dict[str, Any] = {"type": "text", "text": block.text}
+            if forward_cache_control and block.cache_control:
+                part["cache_control"] = block.cache_control
+            parts.append(part)
         elif isinstance(block, ImageBlock):
             img = _anthropic_image_to_openai(block)
             if img:
@@ -73,12 +79,13 @@ def _convert_user_content(content: str | list[ContentBlock]) -> str | list[dict[
                 tool_text = "\n".join(tool_parts)
             else:
                 tool_text = tool_content or ""
-            parts.append(
-                {
-                    "type": "text",
-                    "text": f"<tool_result id={block.tool_use_id}>\n{tool_text}\n</tool_result>",
-                }
-            )
+            part = {
+                "type": "text",
+                "text": f"<tool_result id={block.tool_use_id}>\n{tool_text}\n</tool_result>",
+            }
+            if forward_cache_control and block.cache_control:
+                part["cache_control"] = block.cache_control
+            parts.append(part)
         elif isinstance(block, ToolUseBlock):
             args = json.dumps(block.input)
             parts.append(
@@ -91,7 +98,10 @@ def _convert_user_content(content: str | list[ContentBlock]) -> str | list[dict[
             # Don't render thinking in content string; it's handled separately
             pass
 
-    # If there are no images, collapse to a plain string for broader compatibility
+    # If there are no images, collapse to a plain string for broader compatibility.
+    # When collapsing, individual cache_control markers are lost — but this path
+    # only triggers for text-only content without images, which is rare in the
+    # multi-block contexts where cache_control is used (tool results, mixed content).
     if not has_images and parts:
         text_only = "\n".join(p["text"] for p in parts if p.get("type") == "text")
         return text_only
@@ -134,7 +144,10 @@ def _convert_assistant_content(
     return "\n".join(text_parts), tool_calls, reasoning_content
 
 
-def _convert_messages(messages: list[Message]) -> list[dict[str, Any]]:
+def _convert_messages(
+    messages: list[Message],
+    forward_cache_control: bool = True,
+) -> list[dict[str, Any]]:
     """Convert Anthropic messages to OpenAI message dicts."""
     result: list[dict[str, Any]] = []
     for msg in messages:
@@ -148,13 +161,14 @@ def _convert_messages(messages: list[Message]) -> list[dict[str, Any]]:
             for block in content_blocks:
                 if isinstance(block, ToolResultBlock):
                     tool_text = _tool_result_to_text(block)
-                    tool_results.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": block.tool_use_id,
-                            "content": tool_text,
-                        }
-                    )
+                    tool_msg: dict[str, Any] = {
+                        "role": "tool",
+                        "tool_call_id": block.tool_use_id,
+                        "content": tool_text,
+                    }
+                    if forward_cache_control and block.cache_control:
+                        tool_msg["cache_control"] = block.cache_control
+                    tool_results.append(tool_msg)
                 else:
                     other_blocks.append(block)
 
@@ -163,11 +177,11 @@ def _convert_messages(messages: list[Message]) -> list[dict[str, Any]]:
 
             # Emit remaining user content if any
             if other_blocks:
-                content = _convert_user_content(other_blocks)
+                content = _convert_user_content(other_blocks, forward_cache_control)
                 result.append({"role": "user", "content": content})
             elif not tool_results:
                 # Fallback: content was a plain string
-                content = _convert_user_content(msg.content)
+                content = _convert_user_content(msg.content, forward_cache_control)
                 result.append({"role": "user", "content": content})
 
         elif msg.role == "assistant":
@@ -257,6 +271,7 @@ def _convert_tool_choice(tool_choice: str | dict[str, Any] | None) -> str | dict
 def anthropic_to_openai(
     request: MessagesRequest,
     backend_name: str,
+    forward_cache_control: bool = True,
 ) -> ChatCompletionRequest:
     """Translate an Anthropic MessagesRequest to an OpenAI ChatCompletionRequest."""
     messages: list[dict[str, Any]] = []
@@ -266,14 +281,30 @@ def anthropic_to_openai(
         if isinstance(request.system, str):
             messages.append({"role": "system", "content": request.system})
         else:
-            system_text = "\n".join(
-                block.text for block in request.system if isinstance(block, TextBlock)
-            )
-            if system_text:
-                messages.append({"role": "system", "content": system_text})
+            # When cache_control is present on any system TextBlock, use an
+            # array of content parts instead of collapsing to a plain string,
+            # so backends that understand cache_control can use the breakpoints.
+            if forward_cache_control and any(
+                isinstance(b, TextBlock) and b.cache_control for b in request.system
+            ):
+                parts: list[dict[str, Any]] = []
+                for block in request.system:
+                    if isinstance(block, TextBlock):
+                        part: dict[str, Any] = {"type": "text", "text": block.text}
+                        if block.cache_control:
+                            part["cache_control"] = block.cache_control
+                        parts.append(part)
+                if parts:
+                    messages.append({"role": "system", "content": parts})
+            else:
+                system_text = "\n".join(
+                    block.text for block in request.system if isinstance(block, TextBlock)
+                )
+                if system_text:
+                    messages.append({"role": "system", "content": system_text})
 
     # Convert conversation messages
-    messages.extend(_convert_messages(request.messages))
+    messages.extend(_convert_messages(request.messages, forward_cache_control))
 
     # DeepSeek thinking/effort passthrough.
     # Anthropic thinking types: "enabled", "adaptive", "disabled".

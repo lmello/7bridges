@@ -45,7 +45,7 @@ class KimiBridge(Bridge):
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         """Send a non-streaming request to Kimi."""
         self.start_timer()
-        openai_request = anthropic_to_openai(request, self.name)
+        openai_request = anthropic_to_openai(request, self.name, self.forward_cache_control)
         openai_request.model = self.backend_model
         openai_request.prompt_cache_key = (
             self.usage_context.get("session_id") if self.usage_context else None
@@ -90,7 +90,7 @@ class KimiBridge(Bridge):
     async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
         """Send a streaming request to Kimi and yield Anthropic-format events."""
         self.start_timer()
-        openai_request = anthropic_to_openai(request, self.name)
+        openai_request = anthropic_to_openai(request, self.name, self.forward_cache_control)
         openai_request.model = self.backend_model
         openai_request.prompt_cache_key = (
             self.usage_context.get("session_id") if self.usage_context else None
