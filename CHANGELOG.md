@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.15.1 (2026-05-30)
+
+### Bug Fixes
+
+- Add DocumentBlock for PDF/document content blocks from Claude Code
+  ([`211b50b`](https://github.com/sdkks/7bridges/commit/211b50be13c819ff3a8032df14a0d15225a53dbc))
+
+
 ## v1.15.0 (2026-05-29)
 
 ### Features
