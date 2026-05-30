@@ -3,6 +3,7 @@
 import json
 
 from seven_bridges.models.anthropic import (
+    DocumentBlock,
     ImageBlock,
     Message,
     MessagesRequest,
@@ -240,6 +241,43 @@ def test_request_has_images_false():
         messages=[Message(role="user", content="Hello")],
     )
     assert request_has_images(req) is False
+
+
+def test_convert_user_content_with_document():
+    """Document blocks are converted to text placeholder in OpenAI translation."""
+    result = _convert_user_content(
+        [
+            TextBlock(text="Analyze this:"),
+            DocumentBlock(
+                type="document",
+                source={"type": "base64", "media_type": "application/pdf", "data": "aaaa"},
+            ),
+        ]
+    )
+    assert isinstance(result, list)
+    assert result[0] == {"type": "text", "text": "Analyze this:"}
+    assert result[1] == {"type": "text", "text": "[Document: application/pdf]"}
+
+
+def test_convert_user_content_tool_result_with_document():
+    """Documents in tool results become text placeholders."""
+    result = _convert_user_content(
+        [
+            ToolResultBlock(
+                tool_use_id="call_1",
+                content=[
+                    TextBlock(text="Here is the PDF:"),
+                    DocumentBlock(
+                        type="document",
+                        source={"type": "base64", "media_type": "application/pdf", "data": "xyz"},
+                    ),
+                ],
+            ),
+        ]
+    )
+    assert isinstance(result, str)
+    assert "Here is the PDF:" in result
+    assert "[Document: application/pdf]" in result
 
 
 def test_request_has_images_in_tool_result():

@@ -25,6 +25,7 @@ from PIL import Image
 from seven_bridges.backends.base import BridgeError
 from seven_bridges.models.anthropic import (
     ContentBlock,
+    DocumentBlock,
     ImageBlock,
     Message,
     MessagesRequest,
@@ -544,7 +545,7 @@ async def _process_tool_result_images(
     if not isinstance(block.content, list):
         return block
 
-    new_content: list[TextBlock | ImageBlock] = []
+    new_content: list[TextBlock | ImageBlock | DocumentBlock] = []
     image_tasks: list[tuple[int, asyncio.Task[str]]] = []
 
     for idx, item in enumerate(block.content):
@@ -645,7 +646,7 @@ def _strip_message_images(msg: Message) -> Message:
             new_blocks.append(TextBlock(text="[image]"))
         elif isinstance(block, ToolResultBlock):
             if isinstance(block.content, list):
-                new_tool_content: list[TextBlock | ImageBlock] = []
+                new_tool_content: list[TextBlock | ImageBlock | DocumentBlock] = []
                 for item in block.content:
                     if isinstance(item, ImageBlock):
                         new_tool_content.append(TextBlock(text="[image]"))

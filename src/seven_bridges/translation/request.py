@@ -5,6 +5,7 @@ from typing import Any, Literal, cast
 
 from seven_bridges.models.anthropic import (
     ContentBlock,
+    DocumentBlock,
     ImageBlock,
     Message,
     MessagesRequest,
@@ -63,6 +64,11 @@ def _convert_user_content(
             if img:
                 parts.append(img)
                 has_images = True
+        elif isinstance(block, DocumentBlock):
+            source = block.source
+            media = source.get("media_type", "unknown")
+            parts.append({"type": "text", "text": f"[Document: {media}]"})
+            has_images = True  # Keep content as list for mixed document+text
         elif isinstance(block, ToolResultBlock):
             # Tool results become text describing the result
             tool_content = block.content
@@ -76,6 +82,9 @@ def _convert_user_content(
                         if img:
                             url = img["image_url"]["url"]
                             tool_parts.append(f"[Image: {url[:80]}...]")
+                    elif isinstance(item, DocumentBlock):
+                        media = item.source.get("media_type", "unknown")
+                        tool_parts.append(f"[Document: {media}]")
                 tool_text = "\n".join(tool_parts)
             else:
                 tool_text = tool_content or ""

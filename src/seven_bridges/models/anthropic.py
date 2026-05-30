@@ -51,16 +51,30 @@ class ImageBlock(BaseModel):
     source: dict[str, Any]
 
 
+class DocumentBlock(BaseModel):
+    """Anthropic document content block (e.g., PDFs)."""
+
+    type: Literal["document"] = "document"
+    source: dict[str, Any]
+    cache_control: dict[str, str] | None = None
+
+
 class ToolResultBlock(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     tool_use_id: str
-    content: str | list[TextBlock | ImageBlock] | None = None
+    content: str | list[TextBlock | ImageBlock | DocumentBlock] | None = None
     is_error: bool | None = None
     cache_control: dict[str, str] | None = None
 
 
 ContentBlock = (
-    TextBlock | ThinkingBlock | RedactedThinkingBlock | ImageBlock | ToolUseBlock | ToolResultBlock
+    TextBlock
+    | ThinkingBlock
+    | RedactedThinkingBlock
+    | ImageBlock
+    | DocumentBlock
+    | ToolUseBlock
+    | ToolResultBlock
 )
 
 
