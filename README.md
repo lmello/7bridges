@@ -37,6 +37,7 @@ https://github.com/user-attachments/assets/555bf70f-8017-4760-94c7-c745e95f2f33
 - [Development](#development)
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
+- [Backlog](BACKLOG.md)
 - [License](#license)
 
 ---
@@ -486,7 +487,7 @@ For a deep dive into the translation pipeline, content block mapping, streaming 
 │   ├── TROUBLESHOOTING.md       # Full troubleshooting guide
 │   ├── VISION_FALLBACK.md       # Experimental vision feature
 │   ├── OLLAMA_MODELS.md         # Ollama model reference
-│   └── api-schemas/             # API schema references
+│   └── api-schemas/             # API schema references + content block type inventory
 ├── Makefile                     # Common commands (test, lint, start, etc.)
 ├── pyproject.toml               # Python project config & dependencies
 ├── ecosystem.config.js          # PM2 process config
