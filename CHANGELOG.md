@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.15.2 (2026-06-01)
+
+### Bug Fixes
+
+- **deepseek**: Auto-enable thinking when effort is set without explicit thinking
+  ([`3c59954`](https://github.com/sdkks/7bridges/commit/3c599548c1adfbf4555a416efd32ad99306146f4))
+
+### Documentation
+
+- Add content block type inventory and backlog, reference from README
+  ([`04a702f`](https://github.com/sdkks/7bridges/commit/04a702f673df7fc68656400796f0ad2167a538d7))
+
+
 ## v1.15.1 (2026-05-30)
 
 ### Bug Fixes
