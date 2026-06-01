@@ -650,7 +650,12 @@ def test_deepseek_no_thinking_param():
 
 
 def test_deepseek_effort_passthrough():
-    """output_config.effort is passed through as reasoning_effort."""
+    """output_config.effort is passed through as reasoning_effort.
+
+    When effort is set without explicit thinking, the bridge sets
+    thinking=enabled automatically — DeepSeek requires it when
+    reasoning_effort is present.
+    """
     req = MessagesRequest(
         model="claude-sonnet-4-6",
         messages=[Message(role="user", content="Hello")],
@@ -659,7 +664,7 @@ def test_deepseek_effort_passthrough():
     )
     result = anthropic_to_openai(req, "deepseek")
     assert result.reasoning_effort == "max"
-    assert result.thinking is None
+    assert result.thinking == {"type": "enabled"}
 
 
 def test_deepseek_thinking_and_effort_combined():
@@ -686,6 +691,43 @@ def test_deepseek_effort_low_passthrough():
     )
     result = anthropic_to_openai(req, "deepseek")
     assert result.reasoning_effort == "low"
+    assert result.thinking == {"type": "enabled"}
+
+
+def test_deepseek_effort_high_without_thinking():
+    """effort=high without explicit thinking → both fields set.
+
+    This is the exact scenario when Claude Code sends effort="high"
+    without a thinking block. The bridge must auto-add thinking=enabled
+    or DeepSeek hangs.
+    """
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        output_config={"effort": "high"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.reasoning_effort == "high"
+    assert result.thinking == {"type": "enabled"}
+
+
+def test_deepseek_effort_with_disabled_thinking():
+    """effort set with explicit thinking=disabled → respects disabled.
+
+    Contradictory inputs, but explicit disable wins — don't silently
+    re-enable thinking.
+    """
+    req = MessagesRequest(
+        model="claude-sonnet-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "disabled"},
+        output_config={"effort": "high"},
+    )
+    result = anthropic_to_openai(req, "deepseek")
+    assert result.thinking == {"type": "disabled"}
+    assert result.reasoning_effort == "high"
 
 
 def test_kimi_ignores_thinking():

@@ -320,6 +320,10 @@ def anthropic_to_openai(
             effort = request.output_config.get("effort")
             if effort:
                 deepseek_extra["reasoning_effort"] = effort
+                # reasoning_effort requires explicit thinking=enabled;
+                # DeepSeek hangs without it when effort is set alone.
+                if "thinking" not in deepseek_extra:
+                    deepseek_extra["thinking"] = {"type": "enabled"}
 
     # SiliconFlow thinking passthrough.
     # SiliconFlow uses enable_thinking (bool) + thinking_budget (int).
