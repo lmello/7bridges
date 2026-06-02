@@ -143,22 +143,22 @@ class FireworksBridge(Bridge):
                     error_type=error_type,
                 )
 
+            _logged_usage = False
             async for line in response.aiter_lines():
                 if line.startswith("data:"):
                     data = line[5:].strip()
                     if data == "[DONE]":
                         break
-                    # Detect usage-only chunks (from include_usage=True)
                     try:
                         chunk = json.loads(data)
-                        choices = chunk.get("choices", [])
                         usage = chunk.get("usage")
-                        if not choices and usage:
+                        if usage and not _logged_usage:
                             self._log_usage_from_context(
                                 response_id=chunk.get("id"),
                                 usage=usage,
                                 stop_reason=None,
                             )
+                            _logged_usage = True
                     except json.JSONDecodeError:
                         import logging
 
