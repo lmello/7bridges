@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.15.3 (2026-06-02)
+
+### Bug Fixes
+
+- **backends**: Log streaming usage from any chunk, not just empty-choices chunks
+  ([`573e173`](https://github.com/sdkks/7bridges/commit/573e1736cf0a0374004225a80bfed6812c99c7ba))
+
+
 ## v1.15.2 (2026-06-01)
 
 ### Bug Fixes
