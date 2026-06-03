@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.0 (2026-06-03)
+
+### Features
+
+- **dashboard**: Chart.js rebuild, offline support, new analytics endpoints
+  ([`6ddc35f`](https://github.com/sdkks/7bridges/commit/6ddc35fa18c2275a16c9f9397532823d4e104551))
+
+
 ## v1.15.4 (2026-06-03)
 
 ### Bug Fixes
