@@ -51,41 +51,50 @@ class KimiBridge(Bridge):
             self.usage_context.get("session_id") if self.usage_context else None
         )
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.api_base}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "claude-code/0.1.0",
-                },
-                json=openai_request.model_dump(exclude_none=True),
-                timeout=300.0,
-            )
-
-            if response.status_code != 200:
-                error_type = _map_http_error(response.status_code)
-                self._log_error_from_context(
-                    status_code=response.status_code,
-                    error_type=error_type,
-                    message=response.text,
-                )
-                raise BridgeError(
-                    message=response.text,
-                    status_code=response.status_code,
-                    error_type=error_type,
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.api_base}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "claude-code/0.1.0",
+                    },
+                    json=openai_request.model_dump(exclude_none=True),
+                    timeout=300.0,
                 )
 
-            raw = response.json()
-            usage = raw.get("usage")
-            if usage:
-                self._log_usage_from_context(
-                    response_id=raw.get("id"),
-                    usage=usage,
-                    stop_reason=_map_stop_reason(raw.get("choices", [{}])[0].get("finish_reason")),
-                )
+                if response.status_code != 200:
+                    error_type = _map_http_error(response.status_code)
+                    self._log_error_from_context(
+                        status_code=response.status_code,
+                        error_type=error_type,
+                        message=response.text,
+                    )
+                    raise BridgeError(
+                        message=response.text,
+                        status_code=response.status_code,
+                        error_type=error_type,
+                    )
 
-            return openai_to_anthropic(raw, self.model_alias)
+                raw = response.json()
+                usage = raw.get("usage")
+                if usage:
+                    self._log_usage_from_context(
+                        response_id=raw.get("id"),
+                        usage=usage,
+                        stop_reason=_map_stop_reason(
+                            raw.get("choices", [{}])[0].get("finish_reason")
+                        ),
+                    )
+
+                return openai_to_anthropic(raw, self.model_alias)
+        except httpx.RequestError as exc:
+            raise BridgeError(
+                message=f"Upstream connection error: {exc}",
+                status_code=502,
+                error_type="api_error",
+            ) from exc
 
     async def chat_stream(self, request: MessagesRequest) -> AsyncIterator[dict[str, Any]]:
         """Send a streaming request to Kimi and yield Anthropic-format events."""
@@ -100,57 +109,64 @@ class KimiBridge(Bridge):
 
         openai_request.stream_options = StreamOptions(include_usage=True)
 
-        async with (
-            httpx.AsyncClient() as client,
-            client.stream(
-                "POST",
-                f"{self.api_base}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "Accept": "text/event-stream",
-                    "User-Agent": "claude-code/0.1.0",
-                },
-                json=openai_request.model_dump(exclude_none=True),
-                timeout=300.0,
-            ) as response,
-        ):
-            if response.status_code != 200:
-                body = await response.aread()
-                error_type = _map_http_error(response.status_code)
-                self._log_error_from_context(
-                    status_code=response.status_code,
-                    error_type=error_type,
-                    message=body.decode(),
-                )
-                raise BridgeError(
-                    message=body.decode(),
-                    status_code=response.status_code,
-                    error_type=error_type,
-                )
+        try:
+            async with (
+                httpx.AsyncClient() as client,
+                client.stream(
+                    "POST",
+                    f"{self.api_base}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "Accept": "text/event-stream",
+                        "User-Agent": "claude-code/0.1.0",
+                    },
+                    json=openai_request.model_dump(exclude_none=True),
+                    timeout=300.0,
+                ) as response,
+            ):
+                if response.status_code != 200:
+                    body = await response.aread()
+                    error_type = _map_http_error(response.status_code)
+                    self._log_error_from_context(
+                        status_code=response.status_code,
+                        error_type=error_type,
+                        message=body.decode(),
+                    )
+                    raise BridgeError(
+                        message=body.decode(),
+                        status_code=response.status_code,
+                        error_type=error_type,
+                    )
 
-            _logged_usage = False
-            async for line in response.aiter_lines():
-                if line.startswith("data:"):
-                    data = line[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data)
-                        usage = chunk.get("usage")
-                        if usage and not _logged_usage:
-                            self._log_usage_from_context(
-                                response_id=chunk.get("id"),
-                                usage=usage,
-                                stop_reason=None,
-                            )
-                            _logged_usage = True
-                    except json.JSONDecodeError:
-                        import logging
+                _logged_usage = False
+                async for line in response.aiter_lines():
+                    if line.startswith("data:"):
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data)
+                            usage = chunk.get("usage")
+                            if usage and not _logged_usage:
+                                self._log_usage_from_context(
+                                    response_id=chunk.get("id"),
+                                    usage=usage,
+                                    stop_reason=None,
+                                )
+                                _logged_usage = True
+                        except json.JSONDecodeError:
+                            import logging
 
-                        logger = logging.getLogger(__name__)
-                        logger.warning("Failed to parse stream chunk: %r", data)
-                    yield {"type": "raw", "data": data}
+                            logger = logging.getLogger(__name__)
+                            logger.warning("Failed to parse stream chunk: %r", data)
+                        yield {"type": "raw", "data": data}
+        except httpx.RequestError as exc:
+            raise BridgeError(
+                message=f"Upstream stream connection error: {exc}",
+                status_code=502,
+                error_type="api_error",
+            ) from exc
 
 
 def _map_stop_reason(finish_reason: str | None) -> str | None:

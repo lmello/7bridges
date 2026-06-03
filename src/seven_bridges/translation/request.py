@@ -245,21 +245,30 @@ def request_has_images(request: MessagesRequest) -> bool:
 
 
 def _convert_tools(tools: list[Tool] | None) -> list[ChatCompletionTool] | None:
-    """Convert Anthropic tools to OpenAI tool format."""
+    """Convert Anthropic tools to OpenAI tool format.
+
+    Built-in server tools (e.g. web_search_2025) have a ``type``
+    discriminator instead of a ``name`` and ``input_schema``.
+    They are silently skipped — upstream providers don't support them.
+    """
     if not tools:
         return None
-    return [
-        ChatCompletionTool(
-            function=FunctionDefinition(
-                name=tool.name,
-                description=tool.description,
-                parameters=tool.input_schema.model_dump(exclude_none=True)
-                if tool.input_schema
-                else None,
+    converted: list[ChatCompletionTool] = []
+    for tool in tools:
+        if not tool.name:
+            continue  # Built-in server tool; not translatable
+        converted.append(
+            ChatCompletionTool(
+                function=FunctionDefinition(
+                    name=tool.name,
+                    description=tool.description,
+                    parameters=tool.input_schema.model_dump(exclude_none=True)
+                    if tool.input_schema
+                    else None,
+                )
             )
         )
-        for tool in tools
-    ]
+    return converted if converted else None
 
 
 def _convert_tool_choice(tool_choice: str | dict[str, Any] | None) -> str | dict[str, Any] | None:

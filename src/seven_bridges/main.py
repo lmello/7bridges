@@ -216,7 +216,7 @@ async def messages(
         if anthropic_request.output_config
         else None,
         "tool_count": len(tools),
-        "tool_names": [t.name for t in tools],
+        "tool_names": [t.name for t in tools if t.name],
         "message_count": len(anthropic_request.messages),
         "has_images": request_has_images(anthropic_request),
         "has_video": request_has_video(anthropic_request),

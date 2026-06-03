@@ -120,6 +120,8 @@ def _anthropic_messages_to_ollama(
     if request.tools:
         ollama_tools = []
         for tool in request.tools:
+            if not tool.name or not tool.input_schema:
+                continue  # Built-in server tool (e.g. web_search_2025)
             ollama_tools.append(
                 Tool(
                     function=Tool.Function(

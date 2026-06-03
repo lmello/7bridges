@@ -100,9 +100,11 @@ class ToolInputSchema(BaseModel):
 
 
 class Tool(BaseModel):
-    name: str
+    name: str | None = None  # None for built-in tools (e.g. web_search_2025)
     description: str | None = None
-    input_schema: ToolInputSchema
+    input_schema: ToolInputSchema | None = None  # None for built-in tools
+    type: str | None = None  # Built-in tool type discriminator (e.g. "web_search_2025")
+    max_uses: int | None = None  # Max invocations for built-in tools
 
 
 # ---------------------------------------------------------------------------
