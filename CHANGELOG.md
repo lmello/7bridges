@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.15.4 (2026-06-03)
+
+### Bug Fixes
+
+- Handle built-in tools and upstream connection errors
+  ([`00cd43f`](https://github.com/sdkks/7bridges/commit/00cd43f8b5d17806cfd251a4453e2f36cdf932e9))
+
+
 ## v1.15.3 (2026-06-02)
 
 ### Bug Fixes
