@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.16.1 (2026-06-04)
+
+### Bug Fixes
+
+- **kimi**: Remove prompt_cache_key to enable automatic prefix caching
+  ([`d5c540e`](https://github.com/sdkks/7bridges/commit/d5c540e6953c025d539862bac424320b80d3b656))
+
+
 ## v1.16.0 (2026-06-03)
 
 ### Features
