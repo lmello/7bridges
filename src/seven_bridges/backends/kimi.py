@@ -42,14 +42,33 @@ class KimiBridge(Bridge):
         max_tokens=262144,
     )
 
+    @staticmethod
+    def _normalize_usage(usage: dict[str, Any]) -> dict[str, Any]:
+        """Convert Kimi-format usage to the OpenAI-style keys expected by
+        _log_usage_from_context and the usage log module.
+
+        Kimi returns ``cached_tokens`` but not ``prompt_cache_hit_tokens``
+        or ``prompt_cache_miss_tokens``. We compute the missing fields so
+        the cache hit rate formula ``hit / (hit + miss)`` works correctly.
+        """
+        prompt_tok: int = usage.get("prompt_tokens", 0)
+        completion_tok: int = usage.get("completion_tokens", 0)
+        total = usage.get("total_tokens", prompt_tok + completion_tok)
+        cached: int = usage.get("cached_tokens") or 0
+        return {
+            "prompt_tokens": prompt_tok,
+            "completion_tokens": completion_tok,
+            "total_tokens": total,
+            "cached_tokens": cached,
+            "prompt_cache_hit_tokens": cached,
+            "prompt_cache_miss_tokens": max(0, prompt_tok - cached),
+        }
+
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         """Send a non-streaming request to Kimi."""
         self.start_timer()
         openai_request = anthropic_to_openai(request, self.name, self.forward_cache_control)
         openai_request.model = self.backend_model
-        openai_request.prompt_cache_key = (
-            self.usage_context.get("session_id") if self.usage_context else None
-        )
 
         try:
             async with httpx.AsyncClient() as client:
@@ -82,7 +101,7 @@ class KimiBridge(Bridge):
                 if usage:
                     self._log_usage_from_context(
                         response_id=raw.get("id"),
-                        usage=usage,
+                        usage=self._normalize_usage(usage),
                         stop_reason=_map_stop_reason(
                             raw.get("choices", [{}])[0].get("finish_reason")
                         ),
@@ -101,9 +120,6 @@ class KimiBridge(Bridge):
         self.start_timer()
         openai_request = anthropic_to_openai(request, self.name, self.forward_cache_control)
         openai_request.model = self.backend_model
-        openai_request.prompt_cache_key = (
-            self.usage_context.get("session_id") if self.usage_context else None
-        )
         openai_request.stream = True
         from seven_bridges.models.openai import StreamOptions
 
@@ -151,7 +167,7 @@ class KimiBridge(Bridge):
                             if usage and not _logged_usage:
                                 self._log_usage_from_context(
                                     response_id=chunk.get("id"),
-                                    usage=usage,
+                                    usage=self._normalize_usage(usage),
                                     stop_reason=None,
                                 )
                                 _logged_usage = True
