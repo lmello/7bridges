@@ -100,6 +100,7 @@ Each backend is a "bridge":
 | Fireworks AI | `api.fireworks.ai/inference/v1` | Kimi K2.6 | ✅ | ✅ | ✅ | Live |
 | Fireworks AI | `api.fireworks.ai/inference/v1` | MiniMax M2.7 | ❌ | ✅ | ✅ | Live |
 | Xiaomi MiMo | `token-plan-sgp.xiaomimimo.com/v1` | `mimo-v2.5-pro` (Pro), `mimo-v2.5` (Flash) | ✅ | ✅ | ✅ | Live |
+| MiniMax | `api.minimax.io/anthropic/v1` | `MiniMax-M2.7` | ✅ | ✅ | ✅ | Live |
 
 > **Note on vision/image support:** DeepSeek v4 does not natively support image input. By default, image requests to DeepSeek receive a **soft 200 rejection** with guidance to use OCR/DOM fallbacks instead of a fatal 400 error. For full vision support, you can either use the **Kimi bridge** (`claude-opus-4-6` or `claude-opus-4-7`) which maps to Kimi K2.6, or enable the experimental **vision fallback** feature that routes images to a separate VL backend (Kimi or Ollama) and feeds the text description back to the blind model. See [docs/VISION_FALLBACK.md](docs/VISION_FALLBACK.md).
 
@@ -122,6 +123,7 @@ Each backend is a "bridge":
 | `fireworks-minimax-m2p7` | Fireworks AI | `accounts/fireworks/models/minimax-m2p7` | 204,800 | 131,072 |
 | `mimo-v2.5-pro` | Xiaomi MiMo | `mimo-v2.5-pro` | 1,000,000 | 131,072 |
 | `mimo-v2.5` | Xiaomi MiMo | `mimo-v2.5` | 1,000,000 | 131,072 |
+| `minimax-m2.7` | MiniMax | `MiniMax-M2.7` | 204,800 | 131,072 |
 
 ### Per-Bridge Notes
 
@@ -141,6 +143,15 @@ Each backend is a "bridge":
 **Fireworks AI (`fireworks-kimi-k2p6`, `fireworks-minimax-m2p7`)**
 
 - **Thinking / reasoning:** Kimi K2.6 via Fireworks accepts the Anthropic-compatible `thinking` object with `type` and `budget_tokens`. MiniMax M2.7 only accepts `reasoning_effort` string (`low`/`medium`/`high`); the bridge converts accordingly.
+
+**MiniMax (`minimax-m2.7`)**
+
+- **API:** Anthropic-native passthrough — no OpenAI translation. `cache_control`, thinking blocks, and tool use go directly to MiniMax.
+- **Prompt caching:** Explicit `cache_control` breakpoints with `{"type": "ephemeral"}`. Cache prefixes are cumulative with a 5-minute TTL. Up to 4 breakpoints per request. Cache performance is visible in usage stats (`cache_read_input_tokens`, `cache_creation_input_tokens`).
+- **Thinking / reasoning:** Supported natively via the Anthropic `thinking` object with optional `budget_tokens`.
+- **Vision:** Supported.
+- **Context window:** 204,800 tokens.
+- **Auth:** Standard `Authorization: Bearer <MINIMAX_IO_API_KEY>`.
 
 **Xiaomi MiMo (`mimo-v2.5-pro`, `mimo-v2.5`)**
 
@@ -276,6 +287,7 @@ curl -X POST http://localhost:4001/v1/messages \
 | Free, lighter | `ollama-haiku` | Local Qwen 3.5 | Free | Runs on your computer. Needs ~16GB RAM. |
 | Vision + thinking | `mimo-v2.5-pro` | Xiaomi MiMo V2.5 Pro | Token plan | 1M context, prompt caching. |
 | Budget vision | `mimo-v2.5` | Xiaomi MiMo V2.5 Flash | Token plan | 1M context, lighter/faster. |
+| Explicit caching | `minimax-m2.7` | MiniMax M2.7 | Token plan | 204K context, native Anthropic API. |
 
 **Full model alias reference:** See the [Model Aliases](#model-aliases) table above.
 
@@ -430,7 +442,7 @@ Runs the full test suite with an 80% coverage gate. See [`CLAUDE.md`](CLAUDE.md)
 ## Tests
 
 - **Unit**: Request/response field mapping, content block conversion, streaming event generation
-- **E2E**: Full HTTP round-trips with mocked DeepSeek, Kimi, SiliconFlow, Fireworks AI, MiMo, and Ollama APIs using `respx`
+- **E2E**: Full HTTP round-trips with mocked DeepSeek, Kimi, SiliconFlow, Fireworks AI, MiMo, MiniMax, and Ollama APIs using `respx`
 - **Smoke**: Health, auth, model listing, validation errors
 - **Debug**: Middleware request/response capture
 - **Vision fallback**: Image description extraction and VL round-trips
@@ -463,7 +475,8 @@ For a deep dive into the translation pipeline, content block mapping, streaming 
 │   │   ├── fireworks.py     # Fireworks AI bridge
 │   │   ├── ollama.py        # Ollama bridge
 │   │   ├── siliconflow.py   # SiliconFlow bridge
-│   │   └── mimo.py           # Xiaomi MiMo bridge
+│   │   ├── mimo.py           # Xiaomi MiMo bridge
+│   │   └── minimax.py        # MiniMax bridge
 │   └── translation/
 │       ├── request.py       # Anthropic → OpenAI request translation
 │       ├── response.py      # OpenAI → Anthropic response translation

@@ -63,6 +63,18 @@ See [OLLAMA_MODELS.md](OLLAMA_MODELS.md) for full capabilities, architecture det
 
 ---
 
+## MiniMax (`minimax-m2.7`)
+
+- **API:** Anthropic-native passthrough to `api.minimax.io/anthropic/v1/messages`. No OpenAI translation — cache_control, thinking blocks, and tool use pass through directly.
+- **Thinking / reasoning:** Supported natively via the Anthropic `thinking` object. MiniMax accepts `thinking.type` (`enabled`/`disabled`) and optional `budget_tokens`.
+- **Prompt caching:** Explicit `cache_control` breakpoints with `{"type": "ephemeral"}`. The cache prefix is cumulative and refreshes on each hit (5-minute TTL). Up to 4 breakpoints per request. Cache performance is reported in usage as `cache_creation_input_tokens` (write), `cache_read_input_tokens` (hit), and `input_tokens` (uncached suffix).
+- **Vision:** Supported.
+- **Tools:** Supported.
+- **Context window:** 204,800 tokens.
+- **Auth:** Standard `Authorization: Bearer <MINIMAX_IO_API_KEY>`.
+
+---
+
 ## Xiaomi MiMo (`mimo-v2.5-pro`, `mimo-v2.5`)
 
 - **Thinking / reasoning:** MiMo returns `reasoning_content` natively in both streaming and non-streaming responses. The bridge maps this to Anthropic `thinking` blocks. You can control reasoning through:

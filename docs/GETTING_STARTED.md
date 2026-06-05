@@ -20,6 +20,7 @@ If you just want the short version, see the [Quick Start](../README.md#quick-sta
   - [Fireworks AI](#fireworks-ai)
   - [Ollama (Local)](#ollama-local)
   - [Xiaomi MiMo](#xiaomi-mimo)
+  - [MiniMax](#minimax)
 - [Understanding Environment Variables](#understanding-environment-variables)
 - [Switching Between Backends](#switching-between-backends)
 - [Debug Logging](#debug-logging)
@@ -54,6 +55,7 @@ You need:
 | Fireworks AI | Free (trial credits) | ~$0.50–2/million tokens |
 | Fireworks AI | Free (trial credits) | ~$0.50–2/million tokens |
 | Xiaomi MiMo | Token plan | ~$0.14–4/million tokens (depending on model) |
+| MiniMax | Token plan | ~$0.30–1.20/million tokens |
 | Ollama | Free | Free (uses your electricity) |
 
 ---
@@ -374,6 +376,41 @@ export BRIDGE_API_KEY="ollama"
 
 ---
 
+### MiniMax
+
+MiniMax offers the M2.7 model through an Anthropic-compatible API. This is a passthrough bridge — no OpenAI translation — so cache_control, thinking blocks, and tool use work natively.
+
+**1. Sign up:**
+
+Go to [platform.minimax.io](https://platform.minimax.io) and create an account.
+
+**2. Get your API key:**
+
+- Go to [Token Plan](https://platform.minimax.io/subscribe/token-plan) and subscribe
+- In the user center, go to "Basic Information" or "Payment"
+- Copy your Subscription Key
+
+**3. Configure:**
+
+```bash
+export MINIMAX_IO_API_KEY="your-minimax-key-here"
+export BRIDGE_API_KEY="ollama"
+```
+
+**4. Use in Claude Code:**
+
+```
+/model minimax-m2.7    # MiniMax M2.7
+```
+
+**Notes:**
+- Supports **explicit prompt caching** via `cache_control: {"type": "ephemeral"}`. Place breakpoints at the end of static content (system prompt, tool definitions, document blocks). Cache TTL is 5 minutes.
+- Supports **vision**, **reasoning/thinking**, and **tool use**.
+- The context window is 204,800 tokens.
+- Auth uses standard `Authorization: Bearer` header.
+
+---
+
 ### Ollama (Local)
 
 Ollama lets you run open-weight models entirely on your own hardware. No API keys, no usage costs, works offline.
@@ -461,6 +498,7 @@ Here's what each variable does and whether you need it:
 | `SILICONFLOW_API_KEY` | Only for SiliconFlow | Your SiliconFlow API key. |
 | `FIREWORKSAI_API_KEY` | Only for Fireworks | Your Fireworks AI API key. |
 | `MIMO_API_KEY` | Only for MiMo | Your Xiaomi MiMo token plan API key (starts with `tp-`). |
+| `MINIMAX_IO_API_KEY` | Only for MiniMax | Your MiniMax Subscription Key. |
 | `OLLAMA_HOST` | Only for Ollama | URL of your Ollama server. Default: `http://127.0.0.1:11434` |
 | `OLLAMA_SONNET_MODEL` | Only for Ollama | Model name for the `ollama-sonnet` alias. |
 | `OLLAMA_HAIKU_MODEL` | Only for Ollama | Model name for the `ollama-haiku` alias. |
