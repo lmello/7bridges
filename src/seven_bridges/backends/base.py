@@ -54,11 +54,13 @@ class Bridge(ABC):
         api_base: str | None = None,
         model_alias: str = "",
         backend_model: str = "",
+        explicit_cache: bool = False,
     ):
         self.api_key = api_key
         self.api_base = api_base or self.default_api_base
         self.model_alias = model_alias
         self.backend_model = backend_model
+        self.explicit_cache = explicit_cache
         self._debug_log_path: str | None = None
         self._anthropic_beta: str | None = None
         self.usage_context: dict[str, Any] | None = None

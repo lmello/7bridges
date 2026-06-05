@@ -87,11 +87,41 @@ class MiniMaxBridge(Bridge):
             "prompt_cache_miss_tokens": cache_creation + input_tok,
         }
 
+    def _inject_cache_control(self, body: dict[str, Any]) -> None:
+        """Inject cache_control: ephemeral on static content to maximize prefix caching.
+
+        Per MiniMax docs, cache_control markers should be placed on system prompts
+        and tool definitions — the most static, largest portions of the prompt.
+        We mark the last block of system (if any) and the last tool (if any)
+        with cache_control: ephemeral. MiniMax ignores duplicate markers when
+        the content hasn't changed, so session resumption is safe without
+        tracking state.
+        """
+        if not self.explicit_cache:
+            return
+
+        # Mark last system block
+        system = body.get("system")
+        if isinstance(system, list) and system:
+            for block in reversed(system):
+                if isinstance(block, dict) and block.get("type") == "text" and block.get("text"):
+                    block["cache_control"] = {"type": "ephemeral"}
+                    break
+
+        # Mark last tool
+        tools = body.get("tools")
+        if isinstance(tools, list) and tools:
+            for block in reversed(tools):
+                if isinstance(block, dict) and block.get("name"):
+                    block["cache_control"] = {"type": "ephemeral"}
+                    break
+
     async def chat(self, request: MessagesRequest) -> MessagesResponse:
         """Send a non-streaming request to MiniMax."""
         self.start_timer()
         body = request.model_dump(exclude_none=True)
         body["model"] = self.backend_model
+        self._inject_cache_control(body)
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -131,6 +161,7 @@ class MiniMaxBridge(Bridge):
         body = request.model_dump(exclude_none=True)
         body["model"] = self.backend_model
         body["stream"] = True
+        self._inject_cache_control(body)
 
         headers = self._headers()
         headers["Accept"] = "text/event-stream"

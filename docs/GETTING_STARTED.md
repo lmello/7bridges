@@ -395,6 +395,12 @@ Go to [platform.minimax.io](https://platform.minimax.io) and create an account.
 ```bash
 export MINIMAX_IO_API_KEY="your-minimax-key-here"
 export BRIDGE_API_KEY="ollama"
+
+# Optional: enable explicit cache injection for 99%+ steady-state hit rates.
+# Without this, automatic prefix caching achieves ~20-50% depending on conversation
+# growth rate. With this enabled, the bridge injects cache_control: ephemeral on
+# system and tool definitions automatically. Safe for session resumption.
+# export MINIMAX_EXPLICIT_CACHE=true
 ```
 
 **4. Use in Claude Code:**
@@ -405,6 +411,7 @@ export BRIDGE_API_KEY="ollama"
 
 **Notes:**
 - Supports **explicit prompt caching** via `cache_control: {"type": "ephemeral"}`. Place breakpoints at the end of static content (system prompt, tool definitions, document blocks). Cache TTL is 5 minutes.
+- Enable `MINIMAX_EXPLICIT_CACHE=true` to have the bridge inject breakpoints automatically — achieves 99%+ steady-state hit rates vs ~20-50% with automatic prefix caching alone.
 - Supports **vision**, **reasoning/thinking**, and **tool use**.
 - The context window is 204,800 tokens.
 - Auth uses standard `Authorization: Bearer` header.

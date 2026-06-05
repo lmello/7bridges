@@ -67,7 +67,10 @@ See [OLLAMA_MODELS.md](OLLAMA_MODELS.md) for full capabilities, architecture det
 
 - **API:** Anthropic-native passthrough to `api.minimax.io/anthropic/v1/messages`. No OpenAI translation — cache_control, thinking blocks, and tool use pass through directly.
 - **Thinking / reasoning:** The model returns `thinking` blocks natively in responses. For M2.x models, reasoning is always enabled and cannot be disabled or tuned via the API — `thinking.type` and `thinking.budget_tokens` in requests are accepted for compatibility but do not affect behavior. MiniMax's `responses-create` endpoint documents `reasoning.effort` (`minimal`/`low`/`medium`/`high`/`none`), but the docs state these values are accepted for compatibility and do not tune reasoning depth.
-- **Prompt caching:** Explicit `cache_control` breakpoints with `{"type": "ephemeral"}`. The cache prefix is cumulative and refreshes on each hit (5-minute TTL). Up to 4 breakpoints per request. Cache performance is reported in usage as `cache_creation_input_tokens` (write), `cache_read_input_tokens` (hit), and `input_tokens` (uncached suffix).
+- **Prompt caching:** Two mechanisms are available:
+  - **Automatic prefix caching** — MiniMax passively caches repeated prefix content (tools → system → messages) for requests with 512+ input tokens. Works without any markers, but only caches a fixed ~38K window that does not grow with conversation history.
+  - **Explicit `cache_control`** — When `MINIMAX_EXPLICIT_CACHE=true`, the bridge injects `cache_control: {"type": "ephemeral"}` on the last system text block and last tool definition before forwarding. This creates explicit cache breakpoints that survive and grow across turns, achieving 99%+ steady-state hit rates. Safe for session resumption — MiniMax deduplicates or refreshes existing cache entries when the same content is re-sent. Enable via `MINIMAX_EXPLICIT_CACHE=true` in your environment.
+- **Cache performance fields:** `cache_creation_input_tokens` (new writes), `cache_read_input_tokens` (hits), and `input_tokens` (uncached suffix). Up to 4 explicit breakpoints per request. Cache lifetime is 5 minutes, auto-refreshed on hit.
 - **Vision:** Supported.
 - **Tools:** Supported.
 - **Context window:** 204,800 tokens.

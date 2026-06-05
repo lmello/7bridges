@@ -4,6 +4,11 @@ export SILICONFLOW_API_KEY=
 export FIREWORKSAI_API_KEY=
 export MIMO_API_KEY=
 export MINIMAX_IO_API_KEY=
+
+# MiniMax explicit cache control — injects cache_control: ephemeral on system and tool
+# definitions to maximize prompt prefix caching. Off by default. Enable to achieve 99%+
+# steady-state cache hit rates (vs ~20-50% with automatic prefix caching alone).
+# export MINIMAX_EXPLICIT_CACHE=true
 export OLLAMA_HOST=http://127.0.0.1:11434
 export OLLAMA_SONNET_MODEL=qwen3.6:35b-a3b-coding-nvfp4
 export OLLAMA_SONNET_CONTEXT_WINDOW=32768

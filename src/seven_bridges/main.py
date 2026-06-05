@@ -97,7 +97,7 @@ def _log_diagnostic(kind: str, request_body: object, details: dict[str, Any]) ->
 
 def _get_bridge(route: ModelRoute) -> Bridge:
     """Instantiate the correct backend bridge for a model route."""
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "model_alias": route.alias,
         "backend_model": route.backend_model,
     }
@@ -154,7 +154,11 @@ def _get_bridge(route: ModelRoute) -> Bridge:
                 status_code=503,
                 error_type="configuration_error",
             )
-        return MiniMaxBridge(api_key=settings.minimax_api_key, **kwargs)
+        return MiniMaxBridge(
+            api_key=settings.minimax_api_key,
+            explicit_cache=settings.minimax_explicit_cache,
+            **kwargs,
+        )
     else:
         raise BridgeError(
             f"Unknown bridge: {route.bridge}",

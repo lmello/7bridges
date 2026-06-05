@@ -90,6 +90,9 @@ class Settings:
     fireworks_api_key: str = os.environ.get("FIREWORKSAI_API_KEY", "")
     mimo_api_key: str = os.environ.get("MIMO_API_KEY", "")
     minimax_api_key: str = os.environ.get("MINIMAX_IO_API_KEY", "")
+    # Cache control injection for MiniMax — injects cache_control: ephemeral on tools and
+    # system to maximize prompt prefix caching. Off by default; enable via env var.
+    minimax_explicit_cache: bool = os.environ.get("MINIMAX_EXPLICIT_CACHE", "").lower() == "true"
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     # Vision fallback — experimental "See No Evil, Hear No Evil" feature
