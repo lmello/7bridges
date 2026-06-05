@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.18.0 (2026-06-05)
+
+### Bug Fixes
+
+- **debug**: Capture full request body and cache_control markers in debug logs
+  ([`8c69749`](https://github.com/sdkks/7bridges/commit/8c69749444efce249d1981ce99b5aff9a64170fa))
+
+### Documentation
+
+- **minimax**: Correct thinking/reasoning control notes
+  ([`c10b441`](https://github.com/sdkks/7bridges/commit/c10b441d9ecb0f2d6f1d90875adf8ce5697d7344))
+
+### Features
+
+- **minimax**: Add MINIMAX_EXPLICIT_CACHE for 99%+ steady-state cache hit rates
+  ([`ca1a45e`](https://github.com/sdkks/7bridges/commit/ca1a45e9e8f49401724eddbe928d14d110ca47ad))
+
+
 ## v1.17.0 (2026-06-05)
 
 ### Documentation
