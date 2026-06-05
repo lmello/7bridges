@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.18.1 (2026-06-05)
+
+### Bug Fixes
+
+- **dashboard**: Add 30m window option and persist window selection on refresh
+  ([`fc355e5`](https://github.com/sdkks/7bridges/commit/fc355e5a9ac607bde2ababe4daee3fb68ceb4564))
+
+### Documentation
+
+- **backlog**: Document zero-downtime restart architecture; remove implemented MiniMax item
+  ([`a6f62e9`](https://github.com/sdkks/7bridges/commit/a6f62e957a7cd2fda30d8e696e91530c95832643))
+
+
 ## v1.18.0 (2026-06-05)
 
 ### Bug Fixes
