@@ -19,6 +19,10 @@ PRICING: dict[str, dict[str, dict[str, float]]] = {
         "mimo-v2.5": {"input": 0.14, "output": 1.10, "cache_read": 0.014},
         "*": {"input": 0.40, "output": 4.00, "cache_read": 0.15},
     },
+    "minimax": {
+        "minimax-m2.7": {"input": 0.30, "output": 1.20, "cache_read": 0.06},
+        "*": {"input": 0.30, "output": 1.20, "cache_read": 0.06},
+    },
     "*": {
         "*": {"input": 0.40, "output": 4.00, "cache_read": 0.15},
     },
@@ -85,6 +89,7 @@ class Settings:
     siliconflow_api_key: str = os.environ.get("SILICONFLOW_API_KEY", "")
     fireworks_api_key: str = os.environ.get("FIREWORKSAI_API_KEY", "")
     mimo_api_key: str = os.environ.get("MIMO_API_KEY", "")
+    minimax_api_key: str = os.environ.get("MINIMAX_IO_API_KEY", "")
     api_key: str = os.environ.get("BRIDGE_API_KEY", "ollama")
 
     # Vision fallback — experimental "See No Evil, Hear No Evil" feature
@@ -247,6 +252,14 @@ class Settings:
             backend_model="mimo-v2.5",
             display_name="MiMo V2.5 (Xiaomi)",
             context_window=1_000_000,
+            max_output_tokens=131_072,
+        ),
+        "minimax-m2.7": ModelRoute(
+            alias="minimax-m2.7",
+            bridge="minimax",
+            backend_model="MiniMax-M2.7",
+            display_name="MiniMax M2.7",
+            context_window=204_800,
             max_output_tokens=131_072,
         ),
     }

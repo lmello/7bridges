@@ -2636,6 +2636,223 @@ def test_invalid_auth():
     assert resp.json()["error"]["type"] == "authentication_error"
 
 
+# ---------------------------------------------------------------------------
+# MiniMax e2e tests
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+def test_minimax_non_streaming_text():
+    respx.post("https://api.minimax.io/anthropic/v1/messages").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "msg_minimax_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "MiniMax-M2.7",
+                "content": [{"type": "text", "text": "Hello from MiniMax!"}],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "minimax-m2.7",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "message"
+    assert data["model"] == "MiniMax-M2.7"
+    assert len(data["content"]) == 1
+    assert data["content"][0]["type"] == "text"
+    assert data["content"][0]["text"] == "Hello from MiniMax!"
+    assert data["stop_reason"] == "end_turn"
+    assert data["usage"]["input_tokens"] == 10
+    assert data["usage"]["output_tokens"] == 5
+    assert data["usage"]["cache_read_input_tokens"] == 0
+    assert data["usage"]["cache_creation_input_tokens"] == 0
+
+    # Verify the upstream request
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["model"] == "MiniMax-M2.7"
+    assert upstream["messages"][0]["role"] == "user"
+    assert respx.routes[0].calls[0].request.headers["Authorization"] == "Bearer test-minimax-key"
+
+
+@respx.mock
+def test_minimax_non_streaming_with_cache_hit():
+    """MiniMax explicit caching: second request should show cache_read > 0."""
+    respx.post("https://api.minimax.io/anthropic/v1/messages").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "msg_minimax_2",
+                "type": "message",
+                "role": "assistant",
+                "model": "MiniMax-M2.7",
+                "content": [{"type": "text", "text": "Cached response!"}],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 21,
+                    "output_tokens": 393,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 188086,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "minimax-m2.7",
+            "max_tokens": 1024,
+            "system": [
+                {
+                    "type": "text",
+                    "text": "You are a helpful assistant.",
+                },
+                {
+                    "type": "text",
+                    "text": "Pride and Prejudice full text here...",
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+            "messages": [{"role": "user", "content": "Analyze the major themes."}],
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["content"][0]["text"] == "Cached response!"
+    assert data["usage"]["cache_read_input_tokens"] == 188086
+    assert data["usage"]["cache_creation_input_tokens"] == 0
+
+    # Verify cache_control was forwarded to upstream
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["system"][1]["cache_control"] == {"type": "ephemeral"}
+
+
+@respx.mock
+def test_minimax_streaming_text():
+    sse_body = (
+        _make_sse(
+            "message_start",
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_minimax_3",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "MiniMax-M2.7",
+                    "content": [],
+                    "stop_reason": None,
+                    "usage": {
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    },
+                },
+            },
+        )
+        + _make_sse(
+            "content_block_start",
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+        )
+        + _make_sse(
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Hello"},
+            },
+        )
+        + _make_sse(
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": " world"},
+            },
+        )
+        + _make_sse("content_block_stop", {"type": "content_block_stop", "index": 0})
+        + _make_sse(
+            "message_delta",
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 100,
+                    "cache_read_input_tokens": 50,
+                },
+            },
+        )
+        + _make_sse("message_stop", {"type": "message_stop"})
+    )
+
+    respx.post("https://api.minimax.io/anthropic/v1/messages").mock(
+        return_value=Response(
+            200,
+            text=sse_body,
+            headers={"Content-Type": "text/event-stream"},
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "minimax-m2.7",
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "text/event-stream"
+
+    events = _parse_sse(resp.text)
+    assert events[0][0] == "message_start"
+    assert events[0][1]["message"]["model"] == "MiniMax-M2.7"
+
+    text_deltas = [
+        e
+        for e in events
+        if e[0] == "content_block_delta" and e[1]["delta"].get("type") == "text_delta"
+    ]
+    assert "".join(d[1]["delta"]["text"] for d in text_deltas) == "Hello world"
+
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["model"] == "MiniMax-M2.7"
+    assert upstream["stream"] is True
+    assert respx.routes[0].calls[0].request.headers["Authorization"] == "Bearer test-minimax-key"
+
+
 def test_list_models():
     resp = client.get("/v1/models")
     assert resp.status_code == 200
@@ -2658,6 +2875,7 @@ def test_list_models():
     assert "fireworks-minimax-m2p7" in model_ids
     assert "mimo-v2.5-pro" in model_ids
     assert "mimo-v2.5" in model_ids
+    assert "minimax-m2.7" in model_ids
 
 
 def test_health():

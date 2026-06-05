@@ -18,6 +18,7 @@ from seven_bridges.backends.deepseek import DeepSeekBridge
 from seven_bridges.backends.fireworks import FireworksBridge
 from seven_bridges.backends.kimi import KimiBridge
 from seven_bridges.backends.mimo import MiMoBridge
+from seven_bridges.backends.minimax import MiniMaxBridge
 from seven_bridges.backends.ollama import OllamaBridge
 from seven_bridges.backends.siliconflow import SiliconFlowBridge
 from seven_bridges.config import ModelRoute, settings
@@ -146,6 +147,14 @@ def _get_bridge(route: ModelRoute) -> Bridge:
                 error_type="configuration_error",
             )
         return MiMoBridge(api_key=settings.mimo_api_key, **kwargs)
+    elif route.bridge == "minimax":
+        if not settings.minimax_api_key:
+            raise BridgeError(
+                "MINIMAX_IO_API_KEY not configured",
+                status_code=503,
+                error_type="configuration_error",
+            )
+        return MiniMaxBridge(api_key=settings.minimax_api_key, **kwargs)
     else:
         raise BridgeError(
             f"Unknown bridge: {route.bridge}",

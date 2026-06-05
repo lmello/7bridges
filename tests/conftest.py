@@ -17,3 +17,4 @@ def _patch_api_keys(monkeypatch):
     monkeypatch.setattr(settings, "siliconflow_api_key", "test-sf-key")
     monkeypatch.setattr(settings, "fireworks_api_key", "test-fw-key")
     monkeypatch.setattr(settings, "mimo_api_key", "test-mimo-key")
+    monkeypatch.setattr(settings, "minimax_api_key", "test-minimax-key")
