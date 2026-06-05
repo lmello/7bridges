@@ -66,7 +66,7 @@ See [OLLAMA_MODELS.md](OLLAMA_MODELS.md) for full capabilities, architecture det
 ## MiniMax (`minimax-m2.7`)
 
 - **API:** Anthropic-native passthrough to `api.minimax.io/anthropic/v1/messages`. No OpenAI translation — cache_control, thinking blocks, and tool use pass through directly.
-- **Thinking / reasoning:** Supported natively via the Anthropic `thinking` object. MiniMax accepts `thinking.type` (`enabled`/`disabled`) and optional `budget_tokens`.
+- **Thinking / reasoning:** The model returns `thinking` blocks natively in responses. For M2.x models, reasoning is always enabled and cannot be disabled or tuned via the API — `thinking.type` and `thinking.budget_tokens` in requests are accepted for compatibility but do not affect behavior. MiniMax's `responses-create` endpoint documents `reasoning.effort` (`minimal`/`low`/`medium`/`high`/`none`), but the docs state these values are accepted for compatibility and do not tune reasoning depth.
 - **Prompt caching:** Explicit `cache_control` breakpoints with `{"type": "ephemeral"}`. The cache prefix is cumulative and refreshes on each hit (5-minute TTL). Up to 4 breakpoints per request. Cache performance is reported in usage as `cache_creation_input_tokens` (write), `cache_read_input_tokens` (hit), and `input_tokens` (uncached suffix).
 - **Vision:** Supported.
 - **Tools:** Supported.
