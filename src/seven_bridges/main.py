@@ -181,7 +181,10 @@ async def messages(
             },
         )
 
-    body = await request.json()
+    # In debug mode, use the body already parsed and stored by DebugMiddleware.
+    # Without this, Starlette's Request.json() may not see the re-injected body
+    # after the middleware's custom receive() replacement.
+    body = getattr(request.state, "_parsed_body", None) or await request.json()
     try:
         anthropic_request = MessagesRequest.model_validate(body)
     except ValidationError as exc:
@@ -330,7 +333,7 @@ async def count_tokens(
             },
         )
 
-    body = await request.json()
+    body = getattr(request.state, "_parsed_body", None) or await request.json()
     try:
         req = CountTokensRequest.model_validate(body)
     except ValidationError as exc:

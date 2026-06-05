@@ -68,12 +68,20 @@ class DebugMiddleware(BaseHTTPMiddleware):
         except json.JSONDecodeError:
             req_body = body_bytes.decode("utf-8", errors="replace") if body_bytes else None
 
+        # Store parsed body dict in request.state so downstream handlers can access
+        # it without Starlette's body-re-reading issues (request.json() may not
+        # see the re-injected body after our custom receive() replacement).
+        request.state._parsed_body = req_body
+
         # Truncate large request bodies to keep logs readable
         logged_body: object = req_body
         body_size = len(body_bytes) if body_bytes else 0
         if body_size > _MAX_BODY_LOG_BYTES:
             if isinstance(req_body, dict):
                 msg_count = len(req_body.get("messages", []))
+                messages = req_body.get("messages", [])
+                last_msg = messages[-1] if messages else None
+                last_content = last_msg.get("content", []) if last_msg else []
                 logged_body = {
                     "_truncated": True,
                     "_original_bytes": body_size,
@@ -83,10 +91,21 @@ class DebugMiddleware(BaseHTTPMiddleware):
                     "max_tokens": req_body.get("max_tokens"),
                     "thinking": req_body.get("thinking"),
                     "output_config": req_body.get("output_config"),
-                    "last_message_preview": str(req_body.get("messages", [])[-1])[:500]
-                    if msg_count > 0
-                    else None,
+                    "last_message_preview": str(last_content[-1])[:500] if last_content else None,
                 }
+                # Also extract and log cache_control markers from last message
+                cache_ctrl_in_last = []
+                if isinstance(last_content, list):
+                    for block in last_content:
+                        if isinstance(block, dict) and block.get("cache_control"):
+                            cache_ctrl_in_last.append(
+                                {
+                                    "block_type": block.get("type"),
+                                    "cache_control": block.get("cache_control"),
+                                }
+                            )
+                if cache_ctrl_in_last:
+                    logged_body["_cache_control_in_last_message"] = cache_ctrl_in_last
             else:
                 logged_body = f"<truncated: {body_size} bytes>"
 
