@@ -210,7 +210,8 @@ footer{text-align:center;padding:14px;color:#484f58;font-size:0.72rem;border-top
     <div class="filter-pills" id="filter-pills"></div>
     <label for="window-select" style="font-size:0.7rem;color:#8b949e;text-transform:uppercase">Window</label>
     <select id="window-select">
-      <option value="1">1h</option><option value="2">2h</option><option value="6">6h</option>
+      <option value="0.5">30m</option><option value="1">1h</option>
+      <option value="2">2h</option><option value="6">6h</option>
       <option value="8">8h</option><option value="24" selected>24h</option>
       <option value="168">7d</option><option value="720">30d</option>
     </select>
@@ -336,7 +337,7 @@ function fmtTrend(pct){
 }
 
 /* ---- State ---- */
-var activeBackends=[],allBackends=[],windowHours=24,refreshMs=60000,refreshTimer=null;
+var activeBackends=[],allBackends=[],windowHours=parseInt(document.getElementById('window-select').value,10)||24,refreshMs=60000,refreshTimer=null;
 var statsData=null,toolsData=null,activityData=null;
 var lastSort={table:null,col:null,asc:true};
 
