@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.17.0 (2026-06-05)
+
+### Documentation
+
+- **minimax**: Add MiniMax to README, GETTING_STARTED, BRIDGE_NOTES, envrc
+  ([`ed7eeac`](https://github.com/sdkks/7bridges/commit/ed7eeacc25684d6f8dfe0c1ffd4fa8ddd5d059af))
+
+### Features
+
+- **minimax**: Add passthrough Anthropic bridge for MiniMax M2.7
+  ([`154802e`](https://github.com/sdkks/7bridges/commit/154802e4bce1e41821e4fd0f33ba48595f35be6a))
+
+
 ## v1.16.1 (2026-06-04)
 
 ### Bug Fixes
