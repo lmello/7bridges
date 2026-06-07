@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.3 (2026-06-07)
+
+### Bug Fixes
+
+- **models**: Allow system role messages for mid_conversation_system blocks
+  ([`44ea20d`](https://github.com/sdkks/7bridges/commit/44ea20d505bdafeb20e5d9a668465513f9247d3e))
+
+
 ## v1.19.2 (2026-06-07)
 
 ### Bug Fixes
