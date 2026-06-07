@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.0 (2026-06-07)
+
+### Features
+
+- **config**: Add MiniMax M3 model route
+  ([`0c7bb92`](https://github.com/sdkks/7bridges/commit/0c7bb92399d877a6cdf1a3e08bf7732e80c22975))
+
+
 ## v1.18.1 (2026-06-05)
 
 ### Bug Fixes
