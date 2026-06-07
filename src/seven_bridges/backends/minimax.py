@@ -47,7 +47,7 @@ class MiniMaxBridge(Bridge):
         supports_reasoning=True,
         supports_tool_calls=True,
         supports_video=False,
-        max_tokens=204800,
+        max_tokens=512_000,
     )
 
     def _headers(self) -> dict[str, str]:
