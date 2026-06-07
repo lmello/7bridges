@@ -2695,6 +2695,53 @@ def test_minimax_non_streaming_text():
 
 
 @respx.mock
+def test_minimax_non_streaming_null_content():
+    """MiniMax may return content: null on edge cases; bridge normalizes to [].\
+\
+\
+    Regression test for the case where MiniMax returns a well-formed 200 response
+    with content: null instead of content: [].
+    """
+    respx.post("https://api.minimax.io/anthropic/v1/messages").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "msg_minimax_null",
+                "type": "message",
+                "role": "assistant",
+                "model": "MiniMax-M3",
+                "content": None,  # MiniMax can return null on truncated/edge responses
+                "stop_reason": "max_tokens",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "minimax-m3",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 1,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "message"
+    assert data["model"] == "MiniMax-M3"
+    assert data["content"] == []
+    assert data["stop_reason"] == "max_tokens"
+
+
+@respx.mock
 def test_minimax_non_streaming_with_cache_hit():
     """MiniMax explicit caching: second request should show cache_read > 0."""
     respx.post("https://api.minimax.io/anthropic/v1/messages").mock(
