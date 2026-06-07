@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.19.1 (2026-06-07)
+
+### Bug Fixes
+
+- **minimax**: Normalize null content to empty list in non-streaming response
+  ([`ae2184b`](https://github.com/sdkks/7bridges/commit/ae2184b04552687a32f7ea4c9131cfd463359712))
+
+### Testing
+
+- **e2e**: Add regression test for MiniMax null content normalization
+  ([`97bed5c`](https://github.com/sdkks/7bridges/commit/97bed5cca5f6cef3003bb033e508e5628fab6b37))
+
+
 ## v1.19.0 (2026-06-07)
 
 ### Features
