@@ -21,6 +21,7 @@ PRICING: dict[str, dict[str, dict[str, float]]] = {
     },
     "minimax": {
         "minimax-m2.7": {"input": 0.30, "output": 1.20, "cache_read": 0.06},
+        "minimax-m3": {"input": 0.30, "output": 1.20, "cache_read": 0.06},
         "*": {"input": 0.30, "output": 1.20, "cache_read": 0.06},
     },
     "*": {
@@ -264,6 +265,14 @@ class Settings:
             display_name="MiniMax M2.7",
             context_window=204_800,
             max_output_tokens=131_072,
+        ),
+        "minimax-m3": ModelRoute(
+            alias="minimax-m3",
+            bridge="minimax",
+            backend_model="MiniMax-M3",
+            display_name="MiniMax M3",
+            context_window=1_000_000,
+            max_output_tokens=512_000,
         ),
     }
 
