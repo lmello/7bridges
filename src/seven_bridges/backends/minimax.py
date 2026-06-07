@@ -145,6 +145,10 @@ class MiniMaxBridge(Bridge):
                 )
 
             raw = response.json()
+            # MiniMax may return content: null on truncated/max-tokens responses.
+            # Normalize to an empty list so Pydantic validation succeeds.
+            if raw.get("content") is None:
+                raw["content"] = []
             usage = raw.get("usage")
             if usage:
                 self._log_usage_from_context(
