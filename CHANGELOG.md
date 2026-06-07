@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.2 (2026-06-07)
+
+### Bug Fixes
+
+- **minimax**: Bump capabilities.max_tokens to 512K for M3
+  ([`bbba05f`](https://github.com/sdkks/7bridges/commit/bbba05f45033414e3b6c744076a2bb56ca14be4f))
+
+
 ## v1.19.1 (2026-06-07)
 
 ### Bug Fixes
