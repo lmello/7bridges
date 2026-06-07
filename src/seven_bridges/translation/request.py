@@ -205,6 +205,12 @@ def _convert_messages(
                 openai_msg["reasoning_content"] = reasoning_content
 
             result.append(openai_msg)
+
+        elif msg.role == "system":
+            # Mid-conversation system messages (mid_conversation_system blocks).
+            # OpenAI has no native equivalent; fold content into a user message.
+            content = _convert_user_content(msg.content, forward_cache_control)
+            result.append({"role": "user", "content": content})
     return result
 
 

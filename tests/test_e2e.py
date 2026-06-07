@@ -2742,6 +2742,55 @@ def test_minimax_non_streaming_null_content():
 
 
 @respx.mock
+def test_minimax_passthrough_system_role_message():
+    """System-role messages pass through unchanged to MiniMax."""
+    respx.post("https://api.minimax.io/anthropic/v1/messages").mock(
+        return_value=Response(
+            200,
+            json={
+                "id": "msg_minimax_sysrole",
+                "type": "message",
+                "role": "assistant",
+                "model": "MiniMax-M3",
+                "content": [{"type": "text", "text": "Acknowledged."}],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 20,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+        )
+    )
+
+    resp = client.post(
+        "/v1/messages",
+        headers=_auth_headers(),
+        json={
+            "model": "minimax-m3",
+            "messages": [
+                {"role": "user", "content": "Hello"},
+                {"role": "system", "content": "System note mid-conversation"},
+                {"role": "assistant", "content": "OK"},
+            ],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["content"][0]["text"] == "Acknowledged."
+
+    upstream = json.loads(respx.routes[0].calls[0].request.content)
+    assert upstream["model"] == "MiniMax-M3"
+    assert len(upstream["messages"]) == 3
+    assert upstream["messages"][1]["role"] == "system"
+    assert upstream["messages"][1]["content"] == "System note mid-conversation"
+
+
+@respx.mock
 def test_minimax_non_streaming_with_cache_hit():
     """MiniMax explicit caching: second request should show cache_read > 0."""
     respx.post("https://api.minimax.io/anthropic/v1/messages").mock(

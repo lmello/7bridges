@@ -64,6 +64,24 @@ def test_anthropic_to_openai_system_text_blocks():
     }
 
 
+def test_anthropic_to_openai_system_role_message():
+    """Mid-conversation system messages fold into a user message."""
+    req = MessagesRequest(
+        model="claude-opus-4-6",
+        messages=[
+            Message(role="user", content="First msg"),
+            Message(role="system", content="System note mid-conversation"),
+            Message(role="assistant", content=[TextBlock(text="Response")]),
+        ],
+    )
+    openai_req = anthropic_to_openai(req, "kimi")
+    assert openai_req.messages == [
+        {"role": "user", "content": "First msg"},
+        {"role": "user", "content": "System note mid-conversation"},
+        {"role": "assistant", "content": "Response"},
+    ]
+
+
 def test_anthropic_to_openai_top_p_forwarded():
     req = MessagesRequest(
         model="claude-opus-4-6",
