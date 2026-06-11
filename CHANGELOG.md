@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.5 (2026-06-11)
+
+### Bug Fixes
+
+- **config**: Add native deepseek-v4-pro and deepseek-v4-flash model aliases
+  ([`e367fb2`](https://github.com/sdkks/7bridges/commit/e367fb22796ebb06a00a9ff8b117b00b75a04c6c))
+
+
 ## v1.19.4 (2026-06-11)
 
 ### Bug Fixes
