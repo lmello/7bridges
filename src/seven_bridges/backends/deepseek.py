@@ -39,7 +39,7 @@ class DeepSeekBridge(Bridge):
         supports_reasoning=True,
         supports_tool_calls=True,
         supports_video=False,
-        max_tokens=8192,
+        max_tokens=393_216,
     )
 
     async def chat(self, request: MessagesRequest) -> MessagesResponse:

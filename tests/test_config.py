@@ -57,6 +57,18 @@ class TestResolveModel:
         assert route.bridge == "deepseek"
         assert "4.6-20260101" in route.display_name
 
+    def test_plain_claude_haiku(self) -> None:
+        """claude-haiku (no version suffix) resolves to deepseek-v4-flash."""
+        settings = Settings()
+        route = settings.resolve_model("claude-haiku")
+        assert route is not None
+        assert route.alias == "claude-haiku"
+        assert route.bridge == "deepseek"
+        assert route.backend_model == "deepseek-v4-flash"
+        assert route.context_window == 1_048_576
+        assert route.max_output_tokens == 393_216
+        assert "DeepSeek V4 Flash" in route.display_name
+
     def test_unknown_model_returns_none(self) -> None:
         settings = Settings()
         assert settings.resolve_model("claude-unknown-9-9") is None
