@@ -69,6 +69,30 @@ class TestResolveModel:
         assert route.max_output_tokens == 393_216
         assert "DeepSeek V4 Flash" in route.display_name
 
+    def test_native_deepseek_v4_pro(self) -> None:
+        """deepseek-v4-pro resolves directly without Anthropic naming."""
+        settings = Settings()
+        route = settings.resolve_model("deepseek-v4-pro")
+        assert route is not None
+        assert route.alias == "deepseek-v4-pro"
+        assert route.bridge == "deepseek"
+        assert route.backend_model == "deepseek-v4-pro"
+        assert route.context_window == 1_048_576
+        assert route.max_output_tokens == 393_216
+        assert route.display_name == "DeepSeek V4 Pro"
+
+    def test_native_deepseek_v4_flash(self) -> None:
+        """deepseek-v4-flash resolves directly without Anthropic naming."""
+        settings = Settings()
+        route = settings.resolve_model("deepseek-v4-flash")
+        assert route is not None
+        assert route.alias == "deepseek-v4-flash"
+        assert route.bridge == "deepseek"
+        assert route.backend_model == "deepseek-v4-flash"
+        assert route.context_window == 1_048_576
+        assert route.max_output_tokens == 393_216
+        assert route.display_name == "DeepSeek V4 Flash"
+
     def test_unknown_model_returns_none(self) -> None:
         settings = Settings()
         assert settings.resolve_model("claude-unknown-9-9") is None

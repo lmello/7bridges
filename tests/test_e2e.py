@@ -2972,6 +2972,8 @@ def test_list_models():
     assert "mimo-v2.5-pro" in model_ids
     assert "mimo-v2.5" in model_ids
     assert "minimax-m2.7" in model_ids
+    assert "deepseek-v4-pro" in model_ids
+    assert "deepseek-v4-flash" in model_ids
 
 
 def test_health():

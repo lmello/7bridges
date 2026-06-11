@@ -133,6 +133,23 @@ class Settings:
             context_window=1_048_576,
             max_output_tokens=393_216,
         ),
+        # Native DeepSeek aliases — use directly to bypass Anthropic model naming
+        "deepseek-v4-pro": ModelRoute(
+            alias="deepseek-v4-pro",
+            bridge="deepseek",
+            backend_model="deepseek-v4-pro",
+            display_name="DeepSeek V4 Pro",
+            context_window=1_048_576,
+            max_output_tokens=393_216,
+        ),
+        "deepseek-v4-flash": ModelRoute(
+            alias="deepseek-v4-flash",
+            bridge="deepseek",
+            backend_model="deepseek-v4-flash",
+            display_name="DeepSeek V4 Flash",
+            context_window=1_048_576,
+            max_output_tokens=393_216,
+        ),
         "claude-opus-4-6": ModelRoute(
             alias="claude-opus-4-6",
             bridge="kimi",
