@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.19.4 (2026-06-11)
+
+### Bug Fixes
+
+- **config**: Add claude-haiku alias and fix DeepSeek max_tokens
+  ([`a30a8e9`](https://github.com/sdkks/7bridges/commit/a30a8e943bc2c2f3d7fb32c15812bfc15381bb14))
+
+
 ## v1.19.3 (2026-06-07)
 
 ### Bug Fixes
