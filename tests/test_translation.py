@@ -748,8 +748,8 @@ def test_deepseek_effort_with_disabled_thinking():
     assert result.reasoning_effort == "high"
 
 
-def test_kimi_ignores_thinking():
-    """Kimi backend never receives thinking or reasoning_effort fields."""
+def test_kimi_always_enables_thinking():
+    """Kimi K2.7 requires thinking=enabled always (supports_thinking_type: only)."""
     req = MessagesRequest(
         model="claude-opus-4-6",
         messages=[Message(role="user", content="Hello")],
@@ -758,8 +758,31 @@ def test_kimi_ignores_thinking():
         output_config={"effort": "max"},
     )
     result = anthropic_to_openai(req, "kimi")
-    assert result.thinking is None
+    assert result.thinking == {"type": "enabled"}
     assert result.reasoning_effort is None
+
+
+def test_kimi_forces_thinking_even_when_disabled():
+    """Kimi K2.7 errors on disabled thinking — always force enabled."""
+    req = MessagesRequest(
+        model="claude-opus-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+        thinking={"type": "disabled"},
+    )
+    result = anthropic_to_openai(req, "kimi")
+    assert result.thinking == {"type": "enabled"}
+
+
+def test_kimi_forces_thinking_when_omitted():
+    """Kimi K2.7 errors when thinking is absent — always force enabled."""
+    req = MessagesRequest(
+        model="claude-opus-4-6",
+        messages=[Message(role="user", content="Hello")],
+        max_tokens=100,
+    )
+    result = anthropic_to_openai(req, "kimi")
+    assert result.thinking == {"type": "enabled"}
 
 
 def test_deepseek_thinking_unknown_type_ignored():

@@ -436,11 +436,19 @@ def anthropic_to_openai(
                 clamped = effort if effort in ("low", "medium", "high") else "high"
                 mimo_extra["reasoning_effort"] = clamped
 
+    # Kimi thinking passthrough.
+    # K2.7 Code requires thinking=enabled always (supports_thinking_type: "only").
+    # Disabling thinking or omitting it entirely results in an API error.
+    kimi_extra: dict[str, Any] = {}
+    if backend_name == "kimi":
+        kimi_extra["thinking"] = {"type": "enabled"}
+
     # Build OpenAI request — only one backend matches; extras are mutually exclusive.
     final_thinking = (
         fireworks_extra.get("thinking")
         or deepseek_extra.get("thinking")
         or mimo_extra.get("thinking")
+        or kimi_extra.get("thinking")
     )
     final_reasoning_effort = (
         fireworks_extra.get("reasoning_effort")
