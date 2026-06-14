@@ -93,6 +93,18 @@ class TestResolveModel:
         assert route.max_output_tokens == 393_216
         assert route.display_name == "DeepSeek V4 Flash"
 
+    def test_native_kimi_for_coding(self) -> None:
+        """kimi-for-coding resolves directly without Anthropic naming."""
+        settings = Settings()
+        route = settings.resolve_model("kimi-for-coding")
+        assert route is not None
+        assert route.alias == "kimi-for-coding"
+        assert route.bridge == "kimi"
+        assert route.backend_model == "kimi-for-coding"
+        assert route.context_window == 262_144
+        assert route.max_output_tokens == 32_768
+        assert route.display_name == "Kimi K2.7 Code"
+
     def test_unknown_model_returns_none(self) -> None:
         settings = Settings()
         assert settings.resolve_model("claude-unknown-9-9") is None

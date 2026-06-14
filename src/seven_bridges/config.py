@@ -150,6 +150,15 @@ class Settings:
             context_window=1_048_576,
             max_output_tokens=393_216,
         ),
+        # Native Kimi alias — use directly to bypass Anthropic model naming
+        "kimi-for-coding": ModelRoute(
+            alias="kimi-for-coding",
+            bridge="kimi",
+            backend_model="kimi-for-coding",
+            display_name="Kimi K2.7 Code",
+            context_window=262_144,
+            max_output_tokens=32_768,
+        ),
         "claude-opus-4-6": ModelRoute(
             alias="claude-opus-4-6",
             bridge="kimi",
