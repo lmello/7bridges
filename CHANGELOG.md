@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.19.6 (2026-06-14)
+
+### Bug Fixes
+
+- **config**: Add native kimi-for-coding model alias
+  ([`5c5089d`](https://github.com/sdkks/7bridges/commit/5c5089daad51f0fc050ce0246b6029a7bbafea83))
+
+- **kimi**: Force thinking=enabled for K2.7 Code compatibility
+  ([`5c0850d`](https://github.com/sdkks/7bridges/commit/5c0850d808ca67a51539faa43c46d4d3860eb3ce))
+
+
 ## v1.19.5 (2026-06-11)
 
 ### Bug Fixes
